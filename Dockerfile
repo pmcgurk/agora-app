@@ -10,10 +10,16 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 COPY . .
-RUN npm run build
+RUN npm run build \
+ && chmod +x docker-entrypoint.sh \
+ && chown -R node:node /app/.next
 
+# Run as the unprivileged "node" user that ships with the base image.
 ENV NODE_ENV=production
+USER node
 EXPOSE 3000
 
-RUN chmod +x docker-entrypoint.sh
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+  CMD wget -q -O /dev/null http://127.0.0.1:3000/ || exit 1
+
 ENTRYPOINT ["./docker-entrypoint.sh"]

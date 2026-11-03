@@ -21,8 +21,13 @@ export function withinLimit(key: string, limit: number, windowMs: number): boole
   return bucket.count <= limit;
 }
 
-// Behind a reverse proxy the first X-Forwarded-For entry is the client; otherwise there is no IP to use.
+// A reverse proxy appends the address it received the request from, so the RIGHTMOST
+// X-Forwarded-For entry is the one it vouches for. The leftmost entries are whatever the client
+// sent, so trusting them would let anyone bypass the limits by rotating a header value.
+// Caveat: with no proxy in front, these headers are fully client-controlled, so the limits can be
+// bypassed. Public instances must sit behind a reverse proxy that sets X-Forwarded-For.
 export async function clientIp(): Promise<string> {
   const list = await headers();
-  return list.get("x-forwarded-for")?.split(",")[0]?.trim() || list.get("x-real-ip") || "unknown";
+  const forwarded = list.get("x-forwarded-for")?.split(",").map((part) => part.trim()).filter(Boolean) ?? [];
+  return forwarded.at(-1) || list.get("x-real-ip")?.trim() || "unknown";
 }

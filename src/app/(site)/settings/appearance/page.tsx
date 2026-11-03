@@ -1,11 +1,12 @@
 import { removeTheme, saveAppearance, uploadTheme } from "@/app/actions/settings";
+import ColourEditor from "@/components/ColourEditor";
 import Flash from "@/components/Flash";
 import FontSelect from "@/components/FontSelect";
-import { buttonClass, inputClass } from "@/components/ui";
+import { buttonClass, cardClass, inputClass } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
-import { customThemeName } from "@/themes";
+import { COLOR_PATTERN, customThemeName, RADIUS_PATTERN } from "@/themes";
 import { allFontsHref } from "@/themes/fonts";
-import { THEMES } from "@/themes/registry";
+import { COLOR_KEYS, isThemeName, THEMES } from "@/themes/registry";
 
 export const dynamic = "force-dynamic";
 
@@ -45,6 +46,16 @@ export default async function AppearanceSettings({
   const selected = custom ? "custom" : user.themeName;
   const settings = (user.themeSettings ?? {}) as Record<string, string>;
 
+  // The colours the site uses right now: the chosen built-in palette, with any uploaded or saved overrides on top.
+  const base = THEMES[isThemeName(user.themeName) ? user.themeName : "default"].palette;
+  const colours = Object.fromEntries(
+    COLOR_KEYS.map((key) => {
+      const saved = settings[key];
+      return [key, typeof saved === "string" && COLOR_PATTERN.test(saved) ? saved : base[key]];
+    }),
+  );
+  const radius = typeof settings.radius === "string" && RADIUS_PATTERN.test(settings.radius) ? settings.radius : base.radius;
+
   return (
     <section className="space-y-6">
       <link rel="stylesheet" href={allFontsHref} precedence="default" />
@@ -58,8 +69,8 @@ export default async function AppearanceSettings({
             <label key={name} className="flex items-center gap-3 rounded-theme border border-line p-3">
               <input type="radio" name="theme" value={name} defaultChecked={selected === name} />
               <span className="flex gap-1">
-                {Object.values(theme.palette).map((color) => (
-                  <span key={color} style={{ background: color }} className="h-5 w-5 rounded-theme border border-black/20" />
+                {(["primary", "secondary", "background", "text"] as const).map((key) => (
+                  <span key={key} style={{ background: theme.palette[key] }} className="h-5 w-5 rounded-theme border border-black/20" />
                 ))}
               </span>
               <span>
@@ -78,7 +89,7 @@ export default async function AppearanceSettings({
               </span>
               <span>
                 <strong>{custom}</strong>
-                
+                <span className="block text-sm text-muted">Your own colours, radius or uploaded file.</span>
               </span>
             </label>
           )}
@@ -93,6 +104,14 @@ export default async function AppearanceSettings({
         </label>
         <button className={buttonClass}>Save appearance</button>
       </form>
+
+      <section className={`${cardClass} space-y-4 p-5`}>
+        <div>
+          <h3 className="font-semibold">Customise colours</h3>
+          <p className="text-sm text-muted">Start from the theme above and tweak any colour. The preview updates as you pick.</p>
+        </div>
+        <ColourEditor initial={colours} initialRadius={radius} />
+      </section>
 
       <div className="space-y-3">
         <h3 className="font-semibold">Upload a theme file</h3>

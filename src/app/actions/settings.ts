@@ -12,9 +12,9 @@ import { paymentMode, STRIPE_KEY_PATTERN, STRIPE_WEBHOOK_SECRET_PATTERN, stripeC
 import { prisma } from "@/lib/prisma";
 import { FEDIVERSE_PATTERN, SLUG_PATTERN } from "@/lib/profile-fields";
 import { setInstancePrivate } from "@/lib/instance";
-import { parseThemeFile } from "@/themes";
+import { COLOR_PATTERN, parseThemeFile, RADIUS_PATTERN } from "@/themes";
 import { isFontKey } from "@/themes/fonts";
-import { isThemeName } from "@/themes/registry";
+import { COLOR_KEYS, isThemeName } from "@/themes/registry";
 
 const MAX_THEME_FILE_BYTES = 20_000;
 
@@ -133,6 +133,27 @@ export async function uploadTheme(formData: FormData) {
 
   await prisma.user.update({ where: { id: user.id }, data: { themeSettings: settings } });
   done("appearance", "Theme uploaded.");
+}
+
+// Colour pickers on the Appearance page. Keeps any uploaded CSS or fonts, and replaces only the colours and radius.
+export async function saveCustomColours(formData: FormData) {
+  const user = await requireUser("CREATOR");
+  const colours: Record<string, string> = {};
+  for (const key of COLOR_KEYS) {
+    const value = text(formData, key);
+    if (!COLOR_PATTERN.test(value)) fail("appearance", `"${key}" must be a colour.`);
+    colours[key] = value;
+  }
+  const radius = text(formData, "radius");
+  if (!RADIUS_PATTERN.test(radius)) fail("appearance", "Choose a corner roundness from the list.");
+
+  const existing =
+    user.themeSettings && typeof user.themeSettings === "object" && !Array.isArray(user.themeSettings)
+      ? (user.themeSettings as Record<string, unknown>)
+      : {};
+  const next = { ...existing, ...colours, radius, name: "Custom colours" };
+  await prisma.user.update({ where: { id: user.id }, data: { themeSettings: next } });
+  done("appearance", "Colours saved.");
 }
 
 export async function removeTheme() {
