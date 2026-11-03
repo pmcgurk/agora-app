@@ -1,0 +1,64 @@
+services:
+  postgres:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-agora}
+      POSTGRES_USER: ${POSTGRES_USER:-agora}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-agora_dev_password}
+    ports:
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5433}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-agora} -d ${POSTGRES_DB:-agora}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # MinIO removed its official images from Docker Hub in 2026, so this uses the
+  # community-maintained pgsty fork (same binaries and S3 API). Override MINIO_IMAGE to
+  # point at any other S3-compatible MinIO image.
+  minio:
+    image: ${MINIO_IMAGE:-pgsty/minio:RELEASE.2026-08-04T00-00-00Z}
+    restart: unless-stopped
+    command: minio server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-agora_minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-agora_dev_minio_password}
+      # Browsers PUT uploads straight to MinIO, so only your site origin is allowed to.
+      MINIO_API_CORS_ALLOW_ORIGIN: ${MINIO_CORS_ORIGIN:-${NEXT_PUBLIC_BASE_URL:-http://localhost:3000}}
+    ports:
+      - "9000:9000"
+      - "127.0.0.1:9001:9001"
+    volumes:
+      - minio_data:/data
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-agora}:${POSTGRES_PASSWORD:-agora_dev_password}@postgres:5432/${POSTGRES_DB:-agora}?schema=public
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      NEXT_PUBLIC_BASE_URL: ${NEXT_PUBLIC_BASE_URL:-http://localhost:3000}
+      ALLOW_FREE_SUBSCRIPTIONS: ${ALLOW_FREE_SUBSCRIPTIONS:-true}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-5120}
+      SEED_DEMO_DATA: ${SEED_DEMO_DATA:-false}
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:-http://localhost:9000}
+      MINIO_REGION: ${MINIO_REGION:-us-east-1}
+      MINIO_BUCKET: ${MINIO_BUCKET:-agora-media}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-agora_minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-agora_dev_minio_password}
+    ports:
+      - "3000:3000"
+
+volumes:
+  postgres_data:
+  minio_data:

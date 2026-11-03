@@ -1,0 +1,345 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  CREATOR
+  PATRON
+}
+
+enum MediaKind {
+  IMAGE
+  VIDEO
+  AUDIO
+}
+
+enum PaymentStatus {
+  PAID
+  REFUNDED
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELED
+  PAST_DUE
+}
+
+model User {
+  id               String           @id @default(cuid())
+  name             String
+  email            String           @unique
+  passwordHash     String
+  fediverseHandle  String?
+  role             Role
+  themeName        String           @default("default")
+  themeSettings    Json?
+  // Public page name used in /creators/<slug>; falls back to the id when unset.
+  slug             String?          @unique
+  tagline          String?
+  bio              String?
+  // ISO 4217 code with two decimal places; tier prices are stored in minor units.
+  currency         String           @default("USD")
+  // Set when a creator finishes (or skips) the onboarding workflow.
+  onboardedAt      DateTime?
+  // Creators opt in to paid tiers; without it they only have the free Follower tier.
+  acceptsPayments  Boolean          @default(false)
+  showPoweredBy    Boolean          @default(true)
+  // Google Font choices (keys from src/themes/fonts.ts); null keeps the theme's font.
+  fontBody         String?
+  fontHeading      String?
+  // Notification switches; creators use comments and likes, patrons use posts and replies.
+  notifyComments   Boolean          @default(true)
+  notifyLikes      Boolean          @default(true)
+  notifyPosts      Boolean          @default(true)
+  notifyReplies    Boolean          @default(true)
+  // Creators can switch direct messages from patrons on or off.
+  allowDMs         Boolean          @default(false)
+  // When set, only patrons on this tier (or a pricier one) can message the creator.
+  dmMinTierId      String?
+  dmMinTier        Tier?            @relation("DmTier", fields: [dmMinTierId], references: [id], onDelete: SetNull)
+  // Object keys in MinIO (never URLs); served through /api/avatar/<userId>.
+  avatarKey        String?
+  bannerKey        String?
+  stripeCustomerId String?          @unique
+  blocksMade       Block[]          @relation("BlocksMade")
+  blockedBy        Block[]          @relation("BlockedBy")
+  paymentsMade     Payment[]        @relation("PatronPayments")
+  paymentsTaken    Payment[]        @relation("CreatorPayments")
+  messagesSent     Message[]        @relation("MessagesSent")
+  messagesGot      Message[]        @relation("MessagesReceived")
+  apiKeys          ApiKey[]
+  webhooks         Webhook[]
+  comments         Comment[]
+  likes            PostLike[]
+  commentLikes     CommentLike[]
+  notifications    Notification[]   @relation("Recipient")
+  mutedTiers       TierMute[]
+  profileViews     ProfileViewDay[]
+  createdTiers     Tier[]           @relation("CreatorTiers")
+  subscriptions    Subscription[]   @relation("PatronSubscriptions")
+  posts            Post[]           @relation("CreatorPosts")
+  sessions         Session[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Tier {
+  id              String         @id @default(cuid())
+  creatorId       String
+  name            String
+  price           Int
+  stripePriceId   String?
+  description     String?
+  mutes           TierMute[]
+  payments        Payment[]
+  dmGatedFor      User[]         @relation("DmTier")
+  creator         User           @relation("CreatorTiers", fields: [creatorId], references: [id], onDelete: Cascade)
+  subscriptions   Subscription[]
+  minimumForPosts Post[]         @relation("MinimumTier")
+}
+
+model Subscription {
+  id                   String             @id @default(cuid())
+  patronId             String
+  tierId               String
+  status               SubscriptionStatus
+  createdAt            DateTime           @default(now())
+  // Gifted subscriptions are granted by the creator and are never counted as revenue.
+  gifted               Boolean            @default(false)
+  // Null means the subscription does not expire.
+  expiresAt            DateTime?
+  stripeSubscriptionId String?            @unique
+  // The plan stays active until expiresAt and is not renewed.
+  cancelAtPeriodEnd    Boolean            @default(false)
+  patron               User               @relation("PatronSubscriptions", fields: [patronId], references: [id], onDelete: Cascade)
+  tier                 Tier               @relation(fields: [tierId], references: [id], onDelete: Cascade)
+
+  @@unique([patronId, tierId])
+  @@index([tierId])
+}
+
+model Post {
+  id               String        @id @default(cuid())
+  creatorId        String
+  title            String
+  textContent      String
+  createdAt        DateTime      @default(now())
+  isPublic         Boolean       @default(false)
+  minTierId        String?
+  // Lets viewers without access reveal a heavily blurred copy of each image.
+  allowBlurPreview Boolean       @default(false)
+  // When false, viewers without access see a blurred video thumbnail instead of a clear one.
+  clearThumbnail   Boolean       @default(false)
+  editedAt         DateTime?
+  comments         Comment[]
+  likes            PostLike[]
+  views            PostViewDay[]
+  // Lets viewers without access watch the first N seconds of each video.
+  previewSeconds   Int?
+  media            PostMedia[]
+  creator          User          @relation("CreatorPosts", fields: [creatorId], references: [id], onDelete: Cascade)
+  minTier          Tier?         @relation("MinimumTier", fields: [minTierId], references: [id], onDelete: SetNull)
+}
+
+// Files live in MinIO only (Rule 1); this table stores object keys, never file contents.
+model PostMedia {
+  id                 String    @id @default(cuid())
+  postId             String
+  position           Int
+  kind               MediaKind
+  contentType        String
+  size               BigInt
+  objectKey          String
+  // Server-generated derivatives, safe to show to viewers who cannot see the original.
+  blurObjectKey      String?
+  previewObjectKey   String?
+  thumbObjectKey     String?
+  thumbBlurObjectKey String?
+  post               Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+}
+
+model Comment {
+  id        String        @id @default(cuid())
+  postId    String
+  authorId  String
+  body      String
+  createdAt DateTime      @default(now())
+  // Set for replies; replies are one level deep.
+  parentId  String?
+  parent    Comment?      @relation("Replies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies   Comment[]     @relation("Replies")
+  likes     CommentLike[]
+  post      Post          @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author    User          @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([postId, createdAt])
+}
+
+model PostLike {
+  postId    String
+  userId    String
+  createdAt DateTime @default(now())
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([postId, userId])
+}
+
+// Daily counters keep analytics cheap: no per-visitor rows are stored.
+model PostViewDay {
+  postId String
+  day    DateTime @db.Date
+  views  Int      @default(0)
+  post   Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@id([postId, day])
+}
+
+model ProfileViewDay {
+  creatorId String
+  day       DateTime @db.Date
+  views     Int      @default(0)
+  creator   User     @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+
+  @@id([creatorId, day])
+}
+
+// Singleton row (id "instance") holding instance-wide switches.
+model InstanceSetting {
+  id        String  @id @default("instance")
+  isPrivate Boolean @default(false)
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  type      String
+  message   String
+  href      String
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation("Recipient", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+// A row means the creator does not want "new follower" notifications for this tier.
+model TierMute {
+  userId String
+  tierId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tier   Tier   @relation(fields: [tierId], references: [id], onDelete: Cascade)
+
+  @@id([userId, tierId])
+}
+
+model CommentLike {
+  commentId String
+  userId    String
+  createdAt DateTime @default(now())
+  comment   Comment  @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([commentId, userId])
+}
+
+// A blocked user cannot follow, subscribe, comment, like or message the creator, and loses access.
+model Block {
+  creatorId String
+  userId    String
+  createdAt DateTime @default(now())
+  creator   User     @relation("BlocksMade", fields: [creatorId], references: [id], onDelete: Cascade)
+  user      User     @relation("BlockedBy", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([creatorId, userId])
+}
+
+// Amounts are in minor units. Test checkout records payments too, so refunds work end to end.
+model Payment {
+  id                    String        @id @default(cuid())
+  patronId              String
+  creatorId             String
+  tierId                String?
+  amount                Int
+  currency              String
+  status                PaymentStatus @default(PAID)
+  createdAt             DateTime      @default(now())
+  refundedAt            DateTime?
+  stripePaymentIntentId String?
+  stripeInvoiceId       String?       @unique
+  patron                User          @relation("PatronPayments", fields: [patronId], references: [id], onDelete: Cascade)
+  creator               User          @relation("CreatorPayments", fields: [creatorId], references: [id], onDelete: Cascade)
+  tier                  Tier?         @relation(fields: [tierId], references: [id], onDelete: SetNull)
+
+  @@index([creatorId, createdAt])
+  @@index([patronId, creatorId])
+}
+
+model Message {
+  id          String    @id @default(cuid())
+  senderId    String
+  recipientId String
+  body        String
+  createdAt   DateTime  @default(now())
+  readAt      DateTime?
+  sender      User      @relation("MessagesSent", fields: [senderId], references: [id], onDelete: Cascade)
+  recipient   User      @relation("MessagesReceived", fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@index([recipientId, readAt])
+  @@index([senderId, recipientId, createdAt])
+}
+
+// Only a hash of the key is stored; the full key is shown once when it is created.
+model ApiKey {
+  id         String    @id @default(cuid())
+  userId     String
+  name       String
+  prefix     String
+  keyHash    String    @unique
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Webhook {
+  id            String    @id @default(cuid())
+  userId        String
+  url           String
+  // Used to sign every delivery (HMAC-SHA256).
+  secret        String
+  events        String[]
+  enabled       Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  lastAttemptAt DateTime?
+  // HTTP status of the last attempt; null when it never connected.
+  lastStatus    Int?
+  lastError     String?
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// Stripe retries webhooks, so every processed event id is remembered to keep handling idempotent.
+model StripeEvent {
+  id          String   @id
+  type        String
+  processedAt DateTime @default(now())
+}

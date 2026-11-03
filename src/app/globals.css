@@ -1,0 +1,46 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --theme-primary: #6d28d9;
+  --theme-on-primary: #ffffff;
+  --theme-secondary: #f3e8ff;
+  --theme-background: #ffffff;
+  --theme-surface: #faf5ff;
+  --theme-text: #171717;
+  --theme-muted: #6b7280;
+  --theme-border: #e9d5ff;
+  --theme-danger: #b91c1c;
+  --theme-success: #166534;
+  --theme-radius: 0.5rem;
+  --theme-font-body: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --theme-font-heading: var(--theme-font-body);
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+/* Applied to <body> and to any creator page that overrides the theme. */
+[data-theme-root] {
+  background-color: var(--theme-background);
+  color: var(--theme-text);
+  font-family: var(--theme-font-body);
+}
+
+[data-theme-root] :is(h1, h2, h3, h4) {
+  font-family: var(--theme-font-heading);
+}
+
+[data-theme-root] ::placeholder {
+  color: var(--theme-muted);
+}
+
+.agora-like svg {
+  transition: transform 150ms ease;
+}
+.agora-like[aria-pressed="true"] svg {
+  transform: scale(1.15);
+}

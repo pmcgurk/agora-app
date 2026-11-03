@@ -1,0 +1,126 @@
+"use server";
+
+import { redirect } from "next/navigation";
+import { createSession, requireUser } from "@/lib/auth";
+import { isSupportedCurrency } from "@/lib/currency";
+import { hashPassword } from "@/lib/password";
+import { paymentMode } from "@/lib/payments";
+import { prisma } from "@/lib/prisma";
+import { FEDIVERSE_PATTERN, SLUG_PATTERN } from "@/lib/profile-fields";
+import { clientIp, withinLimit } from "@/lib/rate-limit";
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MIN_PASSWORD_LENGTH = 10;
+
+function text(formData: FormData, name: string): string {
+  const value = formData.get(name);
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function failAt(path: string, message: string): never {
+  redirect(`${path}?error=${encodeURIComponent(message)}`);
+}
+
+// Step 1 of a fresh install: creates the creator account. Only works while no creator exists.
+export async function setupInstance(formData: FormData) {
+  if (await prisma.user.findFirst({ where: { role: "CREATOR" }, select: { id: true } })) redirect("/login");
+  if (!withinLimit(`setup:${await clientIp()}`, 10, 60 * 60 * 1000)) failAt("/setup", "Too many attempts. Try again later.");
+
+  const name = text(formData, "name");
+  const email = text(formData, "email").toLowerCase();
+  const password = String(formData.get("password") ?? "");
+  if (!name || name.length > 100) failAt("/setup", "Enter a name up to 100 characters.");
+  if (!EMAIL_PATTERN.test(email) || email.length > 254) failAt("/setup", "Enter a valid email address.");
+  if (password.length < MIN_PASSWORD_LENGTH || password.length > 200) {
+    failAt("/setup", `Password must be ${MIN_PASSWORD_LENGTH}-200 characters.`);
+  }
+  if (await prisma.user.findUnique({ where: { email }, select: { id: true } })) failAt("/setup", "That email is already registered.");
+
+  const user = await prisma.user.create({
+    data: {
+      name,
+      email,
+      role: "CREATOR",
+      passwordHash: await hashPassword(password),
+      // Every creator gets a free tier so visitors can simply follow them.
+      createdTiers: { create: { name: "Follower", price: 0 } },
+    },
+  });
+  await createSession(user.id);
+  redirect("/onboarding");
+}
+
+async function requireOnboarding() {
+  const user = await requireUser("CREATOR");
+  if (user.onboardedAt) redirect("/dashboard");
+  return user;
+}
+
+export async function skipOnboarding() {
+  const user = await requireOnboarding();
+  await prisma.user.update({ where: { id: user.id }, data: { onboardedAt: new Date() } });
+  redirect("/dashboard");
+}
+
+// Step 2: public page details.
+export async function saveOnboardingProfile(formData: FormData) {
+  const user = await requireOnboarding();
+  const path = "/onboarding";
+  const name = text(formData, "name");
+  const slug = text(formData, "slug").toLowerCase();
+  const tagline = text(formData, "tagline");
+  const bio = text(formData, "bio");
+  const fediverseHandle = text(formData, "fediverseHandle");
+
+  if (!name || name.length > 100) failAt(path, "Enter a name up to 100 characters.");
+  if (slug) {
+    if (!SLUG_PATTERN.test(slug)) failAt(path, "The page name must be 3-30 characters: lowercase letters, numbers and hyphens.");
+    const taken = await prisma.user.findFirst({
+      where: { id: { not: user.id }, OR: [{ slug }, { id: slug }] },
+      select: { id: true },
+    });
+    if (taken) failAt(path, "That page name is already taken.");
+  }
+  if (tagline.length > 120) failAt(path, "The tagline can be up to 120 characters.");
+  if (bio.length > 2000) failAt(path, "The about text can be up to 2000 characters.");
+  if (fediverseHandle && !FEDIVERSE_PATTERN.test(fediverseHandle)) failAt(path, "Enter a fediverse handle like @name@example.social.");
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { name, slug: slug || null, tagline: tagline || null, bio: bio || null, fediverseHandle: fediverseHandle || null },
+  });
+  redirect("/onboarding?step=payments");
+}
+
+// Step 3: optional payments. Without them the creator only has the free Follower tier.
+export async function finishOnboarding(formData: FormData) {
+  const user = await requireOnboarding();
+  const path = "/onboarding?step=payments";
+  const acceptsPayments = formData.get("acceptsPayments") === "on";
+  const currency = text(formData, "currency") || user.currency;
+  if (!isSupportedCurrency(currency)) failAt("/onboarding", "Choose a supported currency.");
+
+  let tier: { name: string; price: number; description: string | null } | null = null;
+  if (acceptsPayments) {
+    if (paymentMode() === "off") failAt("/onboarding", "Payments are not configured on this instance, so only followers are available.");
+    const tierName = text(formData, "tierName");
+    const priceInput = text(formData, "tierPrice");
+    const description = text(formData, "tierDescription");
+    if (tierName || priceInput) {
+      const price = Math.round(Number(priceInput) * 100);
+      if (!tierName || tierName.length > 60) failAt(path, "Enter a tier name up to 60 characters.");
+      if (!Number.isFinite(price) || price < 100 || price > 100_000) failAt(path, "Price must be between 1 and 1000 per month.");
+      if (description.length > 400) failAt(path, "Descriptions are limited to 400 characters.");
+      tier = { name: tierName, price, description: description || null };
+    }
+  }
+
+  await prisma.$transaction([
+    prisma.user.update({
+      where: { id: user.id },
+      data: { currency, acceptsPayments, onboardedAt: new Date() },
+    }),
+    ...(tier ? [prisma.tier.create({ data: { creatorId: user.id, ...tier } })] : []),
+  ]);
+  redirect("/dashboard?notice=" + encodeURIComponent("You're all set. Create your first post!"));
+}

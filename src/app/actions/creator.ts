@@ -1,0 +1,436 @@
+"use server";
+
+import { endAllPlans, endOtherPlans, endPlan } from "@/lib/subscriptions";
+import { getStripe } from "@/lib/stripe";
+import { redirect } from "next/navigation";
+import { activeSubscriptionWhere } from "@/lib/access";
+import { requireUser } from "@/lib/auth";
+import { isBlocked } from "@/lib/blocks";
+import {
+  ALLOWED_MEDIA,
+  isAllowedContentType,
+  MAX_FILES_PER_POST,
+  MAX_IMAGE_BYTES,
+  MAX_PREVIEW_SECONDS,
+  maxUploadBytes,
+  uploadKeyPrefix,
+} from "@/lib/media";
+import {
+  allKeysOf,
+  deleteObjects,
+  NO_DERIVATIVES,
+  syncDerivatives,
+  type TeaserSettings,
+} from "@/lib/post-media";
+import { notifyNewPost, notifyRefund } from "@/lib/notifications";
+import { formatMoney } from "@/lib/currency";
+import { emitEvent } from "@/lib/webhooks";
+import { prisma } from "@/lib/prisma";
+import { headObject } from "@/lib/s3";
+
+export type PostFormState = { error?: string };
+
+type MediaItem = { id: string } | { key: string };
+
+function text(formData: FormData, name: string): string {
+  const value = formData.get(name);
+  return typeof value === "string" ? value.trim() : "";
+}
+
+type VerifiedUpload = { key: string; contentType: keyof typeof ALLOWED_MEDIA; size: number };
+
+// Uploads go browser -> MinIO directly; before attaching, confirm each object exists, belongs
+// to this creator, is not already attached to a post and is within the limits.
+async function verifyUploads(creatorId: string, keys: string[]): Promise<VerifiedUpload[] | string> {
+  const keyPattern = new RegExp(`^${uploadKeyPrefix(creatorId)}[0-9a-f-]{36}\\.[a-z0-9]{2,4}$`);
+  const verified: VerifiedUpload[] = [];
+  for (const key of keys) {
+    if (!keyPattern.test(key)) return "Invalid upload.";
+    if (await prisma.postMedia.findFirst({ where: { objectKey: key }, select: { id: true } })) {
+      return "That file is already attached to a post.";
+    }
+    const head = await headObject(key);
+    if (!head) return "An uploaded file is missing. Remove it and upload it again.";
+    if (!isAllowedContentType(head.contentType)) return "Unsupported file type.";
+    const limit = ALLOWED_MEDIA[head.contentType].kind === "IMAGE" ? MAX_IMAGE_BYTES : maxUploadBytes();
+    if (head.size > limit) {
+      await deleteObjects([key]);
+      return "A file exceeded the size limit.";
+    }
+    verified.push({ key, contentType: head.contentType, size: head.size });
+  }
+  return verified;
+}
+
+function parseItems(raw: string): MediaItem[] | string {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw || "[]");
+  } catch {
+    return "Invalid media list.";
+  }
+  if (!Array.isArray(parsed) || parsed.length > MAX_FILES_PER_POST) {
+    return `Attach up to ${MAX_FILES_PER_POST} files.`;
+  }
+  const items: MediaItem[] = [];
+  const seen = new Set<string>();
+  for (const entry of parsed) {
+    const value = entry as { id?: unknown; key?: unknown };
+    const identifier = typeof value?.id === "string" ? value.id : typeof value?.key === "string" ? value.key : null;
+    if (!identifier || seen.has(identifier)) return "Invalid media list.";
+    seen.add(identifier);
+    items.push(typeof value.id === "string" ? { id: value.id } : { key: value.key as string });
+  }
+  return items;
+}
+
+async function readPostForm(creatorId: string, formData: FormData) {
+  const title = text(formData, "title");
+  const textContent = text(formData, "textContent");
+  const visibility = text(formData, "visibility");
+
+  if (!title || title.length > 150) return "Enter a title up to 150 characters.";
+  if (textContent.length > 20_000) return "Post text is too long.";
+
+  const isPublic = visibility === "public";
+  let minTierId: string | null = null;
+  if (!isPublic) {
+    const tier = await prisma.tier.findFirst({
+      where: { id: visibility, creatorId },
+      select: { id: true },
+    });
+    if (!tier) return "Choose who can see this post.";
+    minTierId = tier.id;
+  }
+
+  const items = parseItems(text(formData, "media"));
+  if (typeof items === "string") return items;
+
+  // Teasers only make sense on gated posts.
+  const requestedSeconds = Math.floor(Number(text(formData, "previewSeconds")));
+  return {
+    title,
+    textContent,
+    isPublic,
+    minTierId,
+    items,
+    allowBlurPreview: !isPublic && formData.get("allowBlurPreview") === "on",
+    clearThumbnail: !isPublic && formData.get("clearThumbnail") === "on",
+    previewSeconds:
+      !isPublic && requestedSeconds >= 1 ? Math.min(requestedSeconds, MAX_PREVIEW_SECONDS) : null,
+  };
+}
+
+export async function createPost(_previous: PostFormState, formData: FormData): Promise<PostFormState> {
+  const user = await requireUser("CREATOR");
+  const form = await readPostForm(user.id, formData);
+  if (typeof form === "string") return { error: form };
+  if (form.items.some((item) => "id" in item)) return { error: "Invalid media list." };
+
+  const uploads = await verifyUploads(
+    user.id,
+    form.items.map((item) => ("key" in item ? item.key : "")),
+  );
+  if (typeof uploads === "string") return { error: uploads };
+
+  const teasers: TeaserSettings = {
+    allowBlurPreview: form.allowBlurPreview,
+    previewSeconds: form.previewSeconds,
+    previewChanged: false,
+  };
+  const created: string[] = [];
+  let postId: string;
+  try {
+    const media = [];
+    for (const [position, upload] of uploads.entries()) {
+      const { kind } = ALLOWED_MEDIA[upload.contentType];
+      const result = await syncDerivatives(
+        user.id,
+        { kind, objectKey: upload.key, ...NO_DERIVATIVES },
+        teasers,
+      );
+      created.push(...result.created);
+      media.push({
+        position,
+        kind,
+        contentType: upload.contentType,
+        size: BigInt(upload.size),
+        objectKey: upload.key,
+        ...result.next,
+      });
+    }
+
+    const post = await prisma.post.create({
+      data: {
+        creatorId: user.id,
+        title: form.title,
+        textContent: form.textContent,
+        isPublic: form.isPublic,
+        minTierId: form.minTierId,
+        allowBlurPreview: form.allowBlurPreview,
+        clearThumbnail: form.clearThumbnail,
+        previewSeconds: form.previewSeconds,
+        media: { create: media },
+      },
+    });
+    postId = post.id;
+  } catch (error) {
+    console.error("Publishing post failed", error);
+    await deleteObjects(created);
+    return { error: "Could not publish the post. Check that the files are valid and try again." };
+  }
+  await notifyNewPost(postId);
+  redirect("/dashboard/posts?notice=Post+published.");
+}
+
+export async function updatePost(_previous: PostFormState, formData: FormData): Promise<PostFormState> {
+  const user = await requireUser("CREATOR");
+  const post = await prisma.post.findFirst({
+    where: { id: text(formData, "postId"), creatorId: user.id },
+    include: { media: true },
+  });
+  if (!post) return { error: "That post no longer exists." };
+
+  const form = await readPostForm(user.id, formData);
+  if (typeof form === "string") return { error: form };
+
+  const existingById = new Map(post.media.map((item) => [item.id, item]));
+  if (form.items.some((item) => "id" in item && !existingById.has(item.id))) {
+    return { error: "Invalid media list." };
+  }
+  const keptIds = new Set(form.items.flatMap((item) => ("id" in item ? [item.id] : [])));
+  const removed = post.media.filter((item) => !keptIds.has(item.id));
+
+  const uploads = await verifyUploads(
+    user.id,
+    form.items.flatMap((item) => ("key" in item ? [item.key] : [])),
+  );
+  if (typeof uploads === "string") return { error: uploads };
+  const uploadByKey = new Map(uploads.map((upload) => [upload.key, upload]));
+
+  const teasers: TeaserSettings = {
+    allowBlurPreview: form.allowBlurPreview,
+    previewSeconds: form.previewSeconds,
+    previewChanged: form.previewSeconds !== post.previewSeconds,
+  };
+  const created: string[] = [];
+  const obsolete: string[] = removed.flatMap(allKeysOf);
+  try {
+    const updates = [];
+    const additions = [];
+    for (const [position, item] of form.items.entries()) {
+      if ("id" in item) {
+        const current = existingById.get(item.id)!;
+        const result = await syncDerivatives(user.id, current, teasers);
+        created.push(...result.created);
+        obsolete.push(...result.obsolete);
+        updates.push(prisma.postMedia.update({ where: { id: item.id }, data: { position, ...result.next } }));
+      } else {
+        const upload = uploadByKey.get(item.key)!;
+        const { kind } = ALLOWED_MEDIA[upload.contentType];
+        const result = await syncDerivatives(user.id, { kind, objectKey: upload.key, ...NO_DERIVATIVES }, teasers);
+        created.push(...result.created);
+        additions.push({
+          postId: post.id,
+          position,
+          kind,
+          contentType: upload.contentType,
+          size: BigInt(upload.size),
+          objectKey: upload.key,
+          ...result.next,
+        });
+      }
+    }
+
+    await prisma.$transaction([
+      prisma.post.update({
+        where: { id: post.id },
+        data: {
+          title: form.title,
+          textContent: form.textContent,
+          isPublic: form.isPublic,
+          minTierId: form.minTierId,
+          allowBlurPreview: form.allowBlurPreview,
+          clearThumbnail: form.clearThumbnail,
+          previewSeconds: form.previewSeconds,
+          editedAt: new Date(),
+        },
+      }),
+      prisma.postMedia.deleteMany({ where: { id: { in: removed.map((item) => item.id) } } }),
+      ...updates,
+      prisma.postMedia.createMany({ data: additions }),
+    ]);
+  } catch (error) {
+    console.error("Updating post failed", error);
+    await deleteObjects(created);
+    return { error: "Could not save the post. Check that the files are valid and try again." };
+  }
+  await deleteObjects(obsolete);
+  redirect("/dashboard/posts?notice=Post+saved.");
+}
+
+export async function deletePost(formData: FormData) {
+  const user = await requireUser("CREATOR");
+  const post = await prisma.post.findFirst({
+    where: { id: text(formData, "postId"), creatorId: user.id },
+    include: { media: true },
+  });
+  if (!post) redirect("/dashboard/posts");
+
+  await prisma.post.delete({ where: { id: post.id } });
+  await deleteObjects(post.media.flatMap(allKeysOf));
+  redirect("/dashboard/posts?notice=Post+deleted.");
+}
+
+function failGift(message: string): never {
+  redirect(`/dashboard/members?error=${encodeURIComponent(message)}`);
+}
+
+export async function giftSubscription(formData: FormData) {
+  const user = await requireUser("CREATOR");
+  const email = text(formData, "email").toLowerCase();
+  const tierId = text(formData, "tierId");
+  const months = Math.floor(Number(text(formData, "months")));
+
+  if (!Number.isFinite(months) || months < 0 || months > 60) failGift("Choose a gift duration.");
+  const tier = await prisma.tier.findFirst({ where: { id: tierId, creatorId: user.id } });
+  if (!tier) failGift("Choose a tier to gift.");
+  const patron = await prisma.user.findFirst({
+    where: { email, role: "PATRON" },
+    select: { id: true },
+  });
+  if (!patron) failGift("No patron account has that email.");
+  if (await isBlocked(user.id, patron.id)) failGift("That patron is blocked. Unblock them first.");
+
+  const existing = await prisma.subscription.findUnique({
+    where: { patronId_tierId: { patronId: patron.id, tierId: tier.id } },
+  });
+  const stillActive =
+    existing?.status === "ACTIVE" && (!existing.expiresAt || existing.expiresAt > new Date());
+  if (stillActive && !existing.gifted) failGift("That patron is already subscribed to this tier.");
+
+  const higher = await prisma.subscription.findFirst({
+    where: {
+      patronId: patron.id,
+      ...activeSubscriptionWhere(),
+      tier: { creatorId: user.id, price: { gt: tier.price } },
+    },
+    select: { id: true },
+  });
+  if (higher) failGift("That patron already has a higher tier.");
+  // One plan per creator: the gift replaces any lower active plan.
+  await endOtherPlans(patron.id, user.id, tier.id);
+
+  // Zero months means the gift never expires.
+  const expiresAt = months === 0 ? null : new Date(Date.now() + months * 30 * 24 * 60 * 60 * 1000);
+  await prisma.subscription.upsert({
+    where: { patronId_tierId: { patronId: patron.id, tierId: tier.id } },
+    update: { status: "ACTIVE", gifted: true, expiresAt },
+    create: { patronId: patron.id, tierId: tier.id, status: "ACTIVE", gifted: true, expiresAt },
+  });
+  redirect("/dashboard/members?notice=Gift+sent.");
+}
+
+export async function revokeSubscription(formData: FormData) {
+  const user = await requireUser("CREATOR");
+  const subscription = await prisma.subscription.findFirst({
+    where: { id: text(formData, "subscriptionId"), status: "ACTIVE", tier: { creatorId: user.id } },
+    select: { id: true },
+  });
+  if (!subscription) backToMembers("error", "That plan is already over.");
+  try {
+    await endPlan(subscription.id, { atPeriodEnd: false });
+  } catch (error) {
+    console.error("Could not end plan", error);
+    backToMembers("error", "Could not end that plan. Try again in a moment.");
+  }
+  backToMembers("notice", "Plan ended.");
+}
+
+function backToMembers(kind: "notice" | "error", message: string): never {
+  redirect(`/dashboard/members?${kind}=${encodeURIComponent(message)}`);
+}
+
+// Blocking removes the person's plan and stops them following, subscribing, commenting, liking or messaging.
+export async function blockUser(formData: FormData) {
+  const user = await requireUser("CREATOR");
+  const userId = text(formData, "userId");
+  const email = text(formData, "email").toLowerCase();
+  const target = await prisma.user.findFirst({
+    where: userId ? { id: userId } : { email },
+    select: { id: true, name: true, role: true },
+  });
+  if (!target) backToMembers("error", "No account has that email.");
+  if (target.id === user.id || target.role === "CREATOR") backToMembers("error", "You can't block a creator account.");
+
+  await prisma.block.upsert({
+    where: { creatorId_userId: { creatorId: user.id, userId: target.id } },
+    update: {},
+    create: { creatorId: user.id, userId: target.id },
+  });
+  try {
+    await endAllPlans(target.id, user.id);
+  } catch (error) {
+    console.error("Could not end plans of blocked user", error);
+    backToMembers("error", `${target.name} is blocked, but a paid plan could not be canceled in Stripe. Cancel it from your Stripe dashboard.`);
+  }
+  emitEvent(user.id, "member.blocked", { user: { id: target.id, name: target.name } });
+  backToMembers("notice", `${target.name} is blocked.`);
+}
+
+export async function unblockUser(formData: FormData) {
+  const user = await requireUser("CREATOR");
+  await prisma.block.deleteMany({ where: { creatorId: user.id, userId: text(formData, "userId") } });
+  backToMembers("notice", "Unblocked.");
+}
+
+// Issues the Stripe refund (when the payment came from Stripe), then marks the payment refunded and
+// ends the plan it paid for. Test checkout takes no real money, so it only updates the records.
+export async function refundPayment(formData: FormData) {
+  const user = await requireUser("CREATOR");
+  const payment = await prisma.payment.findFirst({
+    where: { id: text(formData, "paymentId"), creatorId: user.id, status: "PAID" },
+    include: { patron: { select: { id: true, name: true } }, tier: { select: { name: true } } },
+  });
+  if (!payment) backToMembers("error", "That payment can't be refunded.");
+
+  const amount = formatMoney(payment.amount, payment.currency);
+  if (payment.stripePaymentIntentId) {
+    try {
+      await getStripe().refunds.create(
+        { payment_intent: payment.stripePaymentIntentId },
+        { idempotencyKey: `refund-${payment.id}` },
+      );
+    } catch (error) {
+      console.error("Stripe refund failed", error);
+      backToMembers("error", "Stripe could not refund that payment. Check your Stripe dashboard.");
+    }
+  }
+  await prisma.$transaction([
+    prisma.payment.update({ where: { id: payment.id }, data: { status: "REFUNDED", refundedAt: new Date() } }),
+    ...(payment.tierId
+      ? [
+          prisma.subscription.updateMany({
+            where: { patronId: payment.patronId, tierId: payment.tierId, status: "ACTIVE", gifted: false },
+            data: { status: "CANCELED", cancelAtPeriodEnd: false },
+          }),
+        ]
+      : []),
+  ]);
+  if (payment.tierId) {
+    const plan = await prisma.subscription.findUnique({
+      where: { patronId_tierId: { patronId: payment.patronId, tierId: payment.tierId } },
+      select: { id: true, stripeSubscriptionId: true },
+    });
+    if (plan?.stripeSubscriptionId) {
+      await endPlan(plan.id, { atPeriodEnd: false }).catch((error) => console.error("Could not cancel Stripe plan", error));
+    }
+  }
+  await notifyRefund(payment.patronId, `${user.name} refunded your ${amount} payment`);
+  emitEvent(user.id, "member.refunded", {
+    payment: { id: payment.id, amount: payment.amount, currency: payment.currency },
+    member: { id: payment.patron.id, name: payment.patron.name },
+    tier: payment.tierId ? { id: payment.tierId, name: payment.tier?.name ?? null } : null,
+  });
+  backToMembers("notice", `Refunded ${amount} to ${payment.patron.name}.`);
+}

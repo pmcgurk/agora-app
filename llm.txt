@@ -1,0 +1,131 @@
+# Agora architecture notes for AI agents
+
+Agora is a self-hosted creator-support platform built with Next.js App Router,
+TypeScript, Tailwind CSS, Prisma, PostgreSQL, and MinIO (S3-compatible object
+storage). Docker Compose is the deployment baseline.
+
+## Core rules
+
+- Rule 1: Media files are NEVER stored in PostgreSQL. They are uploaded to MinIO. Gated media is never reachable without an authorization check on every request: images are served via expiring presigned S3 URLs; video and audio are streamed through `/api/media/<id>` with Range support (a presigned video URL could be copied and shared, and expires mid-playback).
+- Rule 2: Tailwind config must map color utilities to CSS variables (e.g., var(--theme-primary)).
+- Rule 3: Creator routes fetch `user.themeSettings` and inject them as inline styles. Distinct layouts live in `src/themes/` and are dynamically imported based on `user.themeName`. When the instance has exactly one creator, the root layout applies that theme site-wide (`data-theme-root` on `<body>`).
+
+## Auth, media and access
+
+- Auth is custom: scrypt password hashes (`src/lib/password.ts`) and DB-backed
+  sessions (`src/lib/auth.ts`). Only a SHA-256 hash of the session token is
+  stored; the cookie is httpOnly. Use `requireUser(role?)` in server actions
+  and pages that need a signed-in user.
+- Mutations are server actions in `src/app/actions/`. Validate all input there.
+- Uploads: the composer (`src/components/PostComposer.tsx`) asks
+  `POST /api/uploads` for a presigned PUT URL and sends bytes straight to MinIO
+  (no app body limit). Keys are `posts/<creatorId>/<uuid>.<ext>`, extension from an
+  allowlist in `src/lib/media.ts`. `createPost` re-verifies each key (prefix, HEAD,
+  type, size) before inserting `PostMedia` rows (key, type, size only).
+- Teaser derivatives are generated server-side in `src/lib/derivatives.ts`: a
+  blurred WebP (downscaled to 20px first) and an ffmpeg-cut preview clip, stored
+  under `derived/`. Free viewers only ever get these via `?variant=blur|preview`.
+- Never put a stored or presigned URL in a page. Render media with
+  `/api/media/<mediaId>`, which authorizes the viewer (`src/lib/access.ts`). Images,
+  blurs and thumbnails redirect to a 60-second presigned URL; full video/audio and
+  preview clips are proxied (`streamObject` in `src/lib/s3.ts`) with Range support
+  and `Cache-Control: private, no-store`. Higher-priced tiers include cheaper
+  tiers of the same creator; a non-public post without a tier is creator-only.
+- MinIO runs from the `pgsty/minio` fork (override via `MINIO_IMAGE`); the bucket is
+  created by `scripts/ensure-bucket.mjs` from `docker-entrypoint.sh`.
+- Presigned URLs are signed for `MINIO_PUBLIC_ENDPOINT`; server-side S3 calls use
+  `MINIO_ENDPOINT`.
+- Each creator has a free tier (price 0, "Follower"), created at signup. Gifted
+  subscriptions have `gifted=true` and an optional `expiresAt`; always filter with
+  `activeSubscriptionWhere()`. Gifts and free tiers never count toward revenue.
+- Payments: `paymentMode()` in `src/lib/payments.ts` is "stripe" when `STRIPE_SECRET_KEY` looks real,
+  else "test" while `ALLOW_FREE_SUBSCRIPTIONS=true` (test checkout at `/creators/<id>/checkout/<tierId>`,
+  no money), else "off" (free follows only). Stripe: `src/lib/stripe.ts` (client, lazy Price per tier,
+  Checkout, portal; `STRIPE_API_URL` overrides the API host for mocks), webhook route
+  `/api/stripe/webhook` (signature check + `StripeEvent` dedupe) -> `src/lib/stripe-events.ts`, which
+  mirrors Stripe subscriptions onto `Subscription` (`stripeSubscriptionId`, `cancelAtPeriodEnd`) and
+  records `Payment` rows (`stripeInvoiceId`, `stripePaymentIntentId`).
+- All plan changes go through `src/lib/subscriptions.ts` (`activate`, `endPlan`, `endOtherPlans`,
+  `endAllPlans`) so Stripe is always told before the local row changes. Supporters end plans with
+  `cancelSubscription` (Stripe: at period end, access until `expiresAt`; otherwise immediately).
+
+## Settings, themes, social and analytics
+
+- Settings live in `src/app/(site)/settings/` (profile, appearance, tiers & currency,
+  account for creators; profile, subscriptions, account for patrons). Mutations are in
+  `src/app/actions/settings.ts` and redirect with `?notice=` / `?error=`.
+- Creators have an optional `slug` (page name); resolve creators with `getCreator()` and
+  link with `creatorPath()` (`src/lib/creator.ts`). `currency` is a display label for tier
+  prices (`src/lib/currency.ts`); amounts are integer minor units and never converted.
+- Themes: built-ins are listed in `src/themes/registry.ts` (default, light, dark), each
+  with `src/themes/<name>/ProfileLayout.tsx`. A creator can upload a JSON theme file
+  (color tokens, radius, fonts and optional custom CSS; see `parseThemeFile`) stored in
+  `themeSettings`; it overrides the preset palette. Custom CSS must pass `isSafeCss` (no
+  `url(`, `@import`, `@font-face`, etc.) and is rendered by `ThemeCss`. Shared UI classes are
+  in `src/components/ui.ts` and carry `agora-*` hook classes; Tailwind colors use
+  `color-mix` over `--theme-*` vars, `rounded-theme` and `font-heading` follow the theme. `showPoweredBy` toggles the footer on the creator page.
+- Posts can be edited (`updatePost`, `/dashboard/posts/[id]/edit`) and deleted
+  (`deletePost`, behind the `ConfirmAction` component); both remove orphaned S3 objects
+  including derivatives. Video thumbnails are made with ffmpeg: locked videos show a blurred
+  thumbnail unless `Post.clearThumbnail` is set.
+- Likes and comments (`src/app/actions/social.ts`) require access to the post. Comment
+  bodies are only shown to viewers who can view the post; counts are public.
+- Analytics: `src/lib/views.ts` keeps per-day counters (`PostViewDay`, `ProfileViewDay`),
+  recorded via `after()` for non-owner visits only. No visitor data is stored.
+
+## Instance, dashboard and branding
+
+- `src/lib/instance.ts`: `getSiteCreator()` returns the creator when exactly one exists
+  (home redirects to them; the header shows their name instead of the `Logo`).
+  `InstanceSetting.isPrivate` makes the site sign-in only: `requireInstanceAccess()` guards
+  pages and `/api/media` returns 401. Login and signup stay open.
+- Creator dashboard: `src/app/(site)/dashboard/` with overview, posts (new/edit), members,
+  tiers and analytics, navigated by `SettingsNav`. Patrons see `patron-overview.tsx`.
+- `LikeButton` (client) does optimistic likes via `toggleLike`, usable from the feed.
+- The Agora logo is `src/components/Logo.tsx` (Fraunces, purple `#6d28d9`).
+
+## Notifications, support page and admin dark mode
+
+- `src/lib/notifications.ts` creates `Notification` rows (like, comment, reply, member, post)
+  and respects `User.notify*` switches plus `TierMute` (creator opt-outs per tier). Calls
+  are best effort and never block the action. The bell is in `SiteHeader`; the list is
+  `/notifications`; preferences are `/settings/notifications`.
+- Comments have one level of replies (`Comment.parentId`).
+- Tiers have a `description`; the public tier grid is `/creators/<id>/support`.
+- The header is rendered inside the creator's themed wrapper (`creators/[id]/layout.tsx`) so it
+  follows their theme. Admin routes (dashboard, settings, notifications, login, signup) can use
+  a dark palette via the `agora-admin-mode` cookie (`AdminScope`, `ModeToggle`).
+- Likes are only rendered for viewers who can see the post. Video thumbnails are created on
+  first request if missing (`ensureVideoThumbnails`).
+- One active plan per patron per creator: `activate()` in `actions/patron.ts` cancels the others;
+  gifts to a lower tier are refused, higher ones replace the current plan (migration 0007).
+- The first account created on a fresh instance becomes the CREATOR; later signups are PATRON.
+- Comment likes: `CommentLike`, `toggleCommentLike`, `LikeButton target="comment"`.
+- Fonts: `src/themes/fonts.ts` lists a small Google Fonts set (`User.fontBody/fontHeading` keys);
+  `FontLink` loads them and `themeStyle(..., fonts)` overrides the `--theme-font-*` variables.
+- Feed media: `components/FeedMedia.tsx` (client) plays unlocked video/audio, opens a lightbox
+  for images, and shows an "n / N" badge, arrows and dots for multi-media posts.
+- Single-creator root: `/` renders `CreatorShell` + `CreatorFeed`; `/creators/<id>` redirects to `/`
+  when `getSiteCreator()` matches. Support/post pages stay under `/creators/<id>/`.
+- Blocks (`Block`, `blockUser`): blocked users lose tier access (`AccessContext.blocked`), cannot like,
+  comment, follow, subscribe, be gifted or message. Payments (`Payment`) are recorded by test checkout;
+  `refundPayment` issues the Stripe refund first (when `stripePaymentIntentId` is set), then marks REFUNDED and ends that plan.
+- Profile images: `User.avatarKey/bannerKey` (MinIO keys under `profiles/<userId>/`). Upload via
+  `POST /api/profile-image` (Origin check, magic-byte sniff, sharp re-encode to WebP), served by
+  `/api/avatar/<userId>?kind=` as a 60 s presigned redirect; render with `components/Avatar.tsx`.
+- Security headers/CSP live in `src/proxy.ts`; login/signup rate limits in `src/lib/rate-limit.ts`.
+- DMs: `User.allowDMs` and optional `dmMinTierId` (`patronCanMessage` in `src/lib/dm.ts`) (Settings -> Privacy); `Message`, `/messages`, patron<->creator only, creator may
+  reply only to people who wrote first.
+- Public API: `/api/v1/*` wrapped by `route()` in `src/lib/api.ts` (bearer `agora_...` keys, hashed in
+  `ApiKey`, 120 req/min). Webhooks: `src/lib/webhooks.ts`; `emitEvent()` is called from
+  `src/lib/notifications.ts` and creator actions, signed HMAC-SHA256, 3 attempts. Docs live at
+  `/settings/api-docs`; add new events to `WEBHOOK_EVENTS`.
+- Font picker is the client `FontSelect` (custom listbox so each option renders in its own font).
+
+## Database
+
+The Prisma schema is in `prisma/schema.prisma`; `prisma.config.ts` supplies the
+database URL and seed command. The generated client is in `src/generated/prisma`
+(git-ignored; `npm run build` regenerates it). Migrations live in
+`prisma/migrations` and are applied by `docker-entrypoint.sh` on container
+start. Never edit an applied migration; add a new one.
