@@ -38,6 +38,18 @@ body {
   color: var(--theme-muted);
 }
 
+/* Native file pickers follow the theme instead of the browser's grey default. */
+input[type="file"]::file-selector-button {
+  margin-right: 0.75rem;
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius);
+  background: var(--theme-secondary);
+  color: var(--theme-text);
+  padding: 0.4rem 0.8rem;
+  font: inherit;
+  cursor: pointer;
+}
+
 .agora-like svg {
   transition: transform 150ms ease;
 }

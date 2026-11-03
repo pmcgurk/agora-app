@@ -76,7 +76,6 @@ export default async function MembersPage({
               <span>{payment.kind === "TIP" ? "Tip" : (payment.tier?.name ?? "Deleted tier")}</span>
               <span>{formatMoney(payment.amount, payment.currency)}</span>
               <span className="text-muted">{payment.createdAt.toISOString().slice(0, 10)}</span>
-              {payment.message && <span className="w-full text-muted">&ldquo;{payment.message}&rdquo;</span>}
               {payment.status === "REFUNDED" ? (
                 <span className="ml-auto rounded-full bg-secondary px-2 text-xs">refunded</span>
               ) : (
@@ -89,6 +88,9 @@ export default async function MembersPage({
                     confirmLabel="Yes, refund"
                   />
                 </span>
+              )}
+              {payment.message && (
+                <span className="order-last basis-full text-sm text-muted">&ldquo;{payment.message}&rdquo;</span>
               )}
             </li>
           ))}

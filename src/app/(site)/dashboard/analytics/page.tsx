@@ -7,6 +7,11 @@ import { getViewAnalytics } from "@/lib/views";
 
 export const dynamic = "force-dynamic";
 
+// "2026-11-03" -> "3 Nov". The day keys are UTC dates, so format them in UTC too.
+function formatDay(day: string): string {
+  return new Date(`${day}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
+}
+
 export default async function AnalyticsPage() {
   const user = await requireUser("CREATOR");
   const [views, posts] = await Promise.all([
@@ -18,6 +23,7 @@ export default async function AnalyticsPage() {
     }),
   ]);
   const peak = Math.max(1, ...views.daily.map((day) => day.profile + day.posts));
+  const total30 = views.profile30 + views.posts30;
   const cards: [string, number][] = [
     ["Profile, 7 days", views.profile7],
     ["Profile, 30 days", views.profile30],
@@ -36,16 +42,31 @@ export default async function AnalyticsPage() {
           </div>
         ))}
       </dl>
-      <div className="flex h-28 items-end gap-0.5" role="img" aria-label="Views per day over the last 30 days">
-        {views.daily.map((day) => (
-          <div
-            key={day.day}
-            title={`${day.day}: ${day.profile} profile, ${day.posts} post views`}
-            style={{ height: `${Math.max(2, ((day.profile + day.posts) / peak) * 100)}%` }}
-            className="flex-1 rounded-t-sm bg-primary"
-          />
-        ))}
-      </div>
+      <section className="agora-card space-y-2 rounded-theme border border-line bg-surface p-4">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="font-semibold">Views, last 30 days</h2>
+          <p className="text-sm text-muted">
+            {total30} total · busiest day {peak > 1 ? peak : 0} views
+          </p>
+        </div>
+        <div className="flex h-32 items-end gap-0.5" role="img" aria-label="Views per day over the last 30 days">
+          {views.daily.map((day) => {
+            const count = day.profile + day.posts;
+            return (
+              <div
+                key={day.day}
+                title={`${formatDay(day.day)}: ${count} views (${day.profile} profile, ${day.posts} post)`}
+                style={{ height: count > 0 ? `${Math.max(4, (count / peak) * 100)}%` : "2px" }}
+                className={`flex-1 rounded-t-sm ${count > 0 ? "bg-primary" : "bg-line"}`}
+              />
+            );
+          })}
+        </div>
+        <div className="flex justify-between text-xs text-muted">
+          <span>{views.daily[0] ? formatDay(views.daily[0].day) : ""}</span>
+          <span>Today</span>
+        </div>
+      </section>
       <table className="w-full text-left text-sm">
         <thead>
           <tr className="text-muted">

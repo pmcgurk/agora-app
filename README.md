@@ -130,9 +130,94 @@ Stripe API, not a live account, so test it in Stripe test mode before going live
 - Dark mode for the dashboard, settings and sign-in screens (toggle in the header).
 - View counters (profile and per post) on the dashboard.
 
-Not built yet: email verification, password reset, and federation. Login and sign-up
-are rate limited per process (in memory), which suits a single instance; also rate limit
-at your reverse proxy if the instance is public.
+Not built yet: email verification, password reset, and federation (see the [roadmap](#roadmap)).
+Login and sign-up are rate limited per process (in memory), which suits a single instance; also
+rate limit at your reverse proxy if the instance is public.
+
+## Roadmap
+
+A running list of what would make Agora more useful, roughly in priority order. Nothing here is
+promised; items move up when someone needs them. Contributions welcome (see
+[CONTRIBUTING.md](./CONTRIBUTING.md)).
+
+### Payments (highest priority)
+
+- [ ] End-to-end test of Stripe Checkout in Stripe test mode: subscribe, tip, end plan, refund,
+      and webhook retries. The current integration has only been exercised against a mock API.
+- [ ] Automated tests for the webhook handler (signature failure, duplicate events, handler failure
+      releasing the event claim) and for the access rules (`canView`, tier price comparisons).
+- [ ] Handle `invoice.payment_failed` grace periods and tell patrons when a card is failing.
+- [ ] Tax and VAT options, and per-creator payout reporting (CSV export of payments and refunds).
+- [ ] Stripe Connect, so creators on a shared instance can be paid directly (large change).
+
+### Email
+
+- [ ] Plug in an email service (SMTP first, then Postmark/SES/Resend adapters) behind a single
+      `lib/mail.ts` interface, configured via environment variables.
+- [ ] Email verification at sign-up and password reset links (time-limited, single use).
+- [ ] Notification emails for new posts and member events, with a per-user opt-in (the notification
+      preferences already exist).
+- [ ] Receipts and refund confirmations for patrons.
+
+### Analytics
+
+- [ ] Date-range picker (7, 30, 90 days, all time) and a total for the period.
+- [ ] Conversion funnel: profile views → follows → paid members, with percentages.
+- [ ] Revenue over time, churn (ended plans per month) and net new members, per tier.
+- [ ] Traffic sources from referrers, stored as coarse domains only (no visitor identifiers).
+- [ ] CSV export for all analytics tables.
+- [ ] Per-post engagement over time, not just totals.
+
+### Creator tools
+
+- [ ] Confirmation before deleting a tier (currently a single click).
+- [ ] Scheduled posts and draft previews shared by link.
+- [ ] Bulk actions on the Members page (message, gift or remove several members).
+- [ ] Creator-to-member broadcast messages.
+- [ ] Post search and tags; sort and filter on the Posts page.
+- [ ] Import from Patreon/Ko-fi exports for members and posts.
+
+### Patron experience
+
+- [ ] Pagination or infinite scroll on the feed and comments.
+- [ ] Email or in-app "new post" digest instead of only notifications.
+- [ ] Downloadable receipts and an export of a patron's own data.
+
+### Theming and presentation
+
+- [ ] More built-in presets and a visual theme gallery.
+- [ ] Separate light and dark palettes for a custom theme, following the visitor's system setting.
+- [ ] Custom domains with automatic HTTPS, documented per reverse proxy.
+- [ ] An accessibility pass: colour contrast checks in the colour editor, keyboard focus styles,
+      and screen-reader labels on the analytics chart and tables.
+- [ ] Mobile pass over the dashboard tables (Tiers and Analytics are tight at phone width; a stacked
+      card layout would read better).
+
+### Security and operations
+
+- [ ] Nonce-based Content Security Policy so `script-src` no longer needs `'unsafe-inline'`.
+- [ ] A scoped MinIO user for the app instead of the root account; document the policy.
+- [ ] Pin the MinIO image by digest and offer the official image as an option once available.
+- [ ] Rate limits that survive restarts and work across several instances (shared store).
+- [ ] Account lockout messaging that doesn't reveal whether an email is registered.
+- [ ] Atomic first-run setup, so two simultaneous requests can't create two creators.
+- [ ] Automated backups of Postgres and MinIO, with a documented restore drill.
+- [ ] Run `npm audit` and dependency updates on a schedule (Dependabot).
+
+### Engineering
+
+- [ ] A test suite in CI (unit tests for access and payment rules, end-to-end tests for signup,
+      posting, subscribing and tipping).
+- [ ] Health endpoint for monitoring (the container healthcheck currently just requests `/`).
+- [ ] Structured logging with request IDs.
+- [ ] Prebuilt container image published to a registry, so self-hosters don't need to build.
+- [ ] Multi-stage Docker build to drop dev dependencies from the runtime image.
+
+### Community
+
+- [ ] Federation (ActivityPub) so creators can be followed from other fediverse servers. The profile
+      already has a fediverse handle field; the protocol work is not started.
+- [ ] Translations and locale-aware currency and date formatting.
 
 Security reports: see [SECURITY.md](./SECURITY.md).
 

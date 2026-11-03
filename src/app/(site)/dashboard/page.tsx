@@ -25,7 +25,7 @@ export default async function DashboardPage({
     ["Gifted", stats.giftedSubscribers],
     ["Monthly revenue", formatMoney(stats.monthlyRevenueCents, user.currency)],
     ["Posts", stats.postCount],
-    ["Storage", `${stats.mediaCount} files · ${formatBytes(stats.storageBytes)}`],
+    ["Storage", `${stats.mediaCount} ${stats.mediaCount === 1 ? "file" : "files"} · ${formatBytes(stats.storageBytes)}`],
   ];
 
   return (

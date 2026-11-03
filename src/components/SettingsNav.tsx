@@ -14,7 +14,7 @@ export default function SettingsNav({
   // "/dashboard" is only active on itself; deeper sections match by prefix.
   const active = (href: string) => pathname === href || (href !== "/dashboard" && pathname.startsWith(`${href}/`));
   return (
-    <nav aria-label={label} className="agora-sidebar flex gap-1 overflow-x-auto sm:w-44 sm:flex-none sm:flex-col">
+    <nav aria-label={label} className="agora-sidebar flex flex-wrap gap-1 sm:w-44 sm:flex-none sm:flex-col">
       {sections.map((section) => (
         <Link
           key={section.href}

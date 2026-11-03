@@ -28,7 +28,7 @@ export async function SiteHeader() {
   const brand = siteCreator && (user || !isPrivate) ? siteCreator : null;
 
   return (
-    <nav className="agora-header flex items-center justify-between gap-4 border-b border-line bg-surface px-4 py-3">
+    <nav className="agora-header flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-line bg-surface px-4 py-3">
       {brand ? (
         <Link href="/" className="agora-brand font-heading text-xl font-bold text-primary">
           {brand.name}
@@ -38,7 +38,7 @@ export async function SiteHeader() {
           <Logo />
         </Link>
       )}
-      <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
         {user ? (
           <>
             {user.role === "CREATOR" && (

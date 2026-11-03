@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { getSiteCreator, requireInstanceAccess } from "@/lib/instance";
 import { prisma } from "@/lib/prisma";
-import { linkClass } from "@/components/ui";
+import { cardClass } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -32,20 +32,39 @@ export default async function MessagesPage() {
   }
 
   return (
-    <main className="mx-auto max-w-2xl space-y-4 px-4 py-10">
-      <h1 className="text-3xl font-bold text-primary">Messages</h1>
-      <ul className="space-y-2">
-        {[...threads.values()].map((thread) => (
-          <li key={thread.id} className="agora-card flex items-baseline gap-3 rounded-theme border border-line bg-surface p-3">
-            <Link href={`/messages/${thread.id}`} className={`${linkClass} font-medium`}>{thread.name}</Link>
-            <span className="min-w-0 flex-1 truncate text-muted">{thread.last}</span>
-            {thread.unread > 0 && (
-              <span className="rounded-full bg-primary px-2 text-xs text-on-primary">{thread.unread}</span>
-            )}
-          </li>
-        ))}
-        {threads.size === 0 && <li className="text-muted">No messages yet.</li>}
-      </ul>
+    <main className="mx-auto max-w-3xl space-y-6 px-4 py-10">
+      <div>
+        <h1 className="text-3xl font-bold text-primary">Messages</h1>
+        <p className="text-sm text-muted">Direct conversations.</p>
+      </div>
+      {threads.size > 0 ? (
+        <ul className="agora-card divide-y divide-line overflow-hidden rounded-theme border border-line bg-surface">
+          {[...threads.values()].map((thread) => (
+            <li key={thread.id}>
+              <Link href={`/messages/${thread.id}`} className="flex items-center gap-3 p-4 hover:bg-secondary">
+                <span className="min-w-0 flex-1">
+                  <span className="block font-medium text-text">{thread.name}</span>
+                  <span className="block truncate text-sm text-muted">{thread.last}</span>
+                </span>
+                {thread.unread > 0 && (
+                  <span className="shrink-0 rounded-full bg-primary px-2 py-0.5 text-xs font-semibold text-on-primary">
+                    {thread.unread} new
+                  </span>
+                )}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div className={`${cardClass} space-y-2 p-6 text-center`}>
+          <p className="font-medium">No messages yet.</p>
+          <p className="text-sm text-muted">
+            {user.role === "CREATOR"
+              ? "When a supporter writes to you, their conversation shows up here."
+              : "Start a conversation from a creator's page, if they accept messages."}
+          </p>
+        </div>
+      )}
     </main>
   );
 }
