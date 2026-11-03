@@ -56,8 +56,9 @@ machine, copy `.env.example` to `.env` and:
 1. Create a Stripe account and copy a secret key (`sk_test_...` while trying it out).
 2. In Stripe → Developers → Webhooks add the endpoint
    `<NEXT_PUBLIC_BASE_URL>/api/stripe/webhook` with the events
-   `checkout.session.completed`, `invoice.paid`, `invoice.payment_failed`,
-   `customer.subscription.updated`, `customer.subscription.deleted` and `charge.refunded`.
+   `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `invoice.paid`,
+   `invoice.payment_failed`, `customer.subscription.updated`, `customer.subscription.deleted`
+   and `charge.refunded`.
 3. Put the key and the endpoint's signing secret in `.env` as `STRIPE_SECRET_KEY` and
    `STRIPE_WEBHOOK_SECRET`, then `docker compose up -d`.
 4. For local testing use the Stripe CLI: `stripe listen --forward-to localhost:3000/api/stripe/webhook`.
@@ -99,6 +100,15 @@ Stripe API, not a live account, so test it in Stripe test mode before going live
 - Profile pictures for everyone and a banner for the creator (Settings -> Profile).
   Uploads are re-encoded server-side (metadata stripped) and stored in MinIO.
 - Supporters can end their plan; paid plans keep working until the period they paid for ends.
+- Ko-fi style tips: creators switch on one-off tips in Settings -> Monetization. A "Support
+  <creator>" card sits at the top of the creator's page (the home page on a
+  single-creator instance), with a "Tip" link in the header and the same card on the Support
+  page. Anyone can tip: guests need no account, and the optional name field (blank = shown as
+  Anonymous) and message are all the creator sees. Tips go through Stripe Checkout
+  (`mode: "payment"`; guests enter their email there for the receipt), show up under Payments on
+  the Members page (refundable), notify the creator and fire the `tip.received` webhook.
+  Guest tipping is rate limited per IP and unavailable on private instances.
+  With no Stripe key and `ALLOW_FREE_SUBSCRIPTIONS=true`, tips are recorded without taking money.
 - Public REST API with API keys and signed webhooks for every notification type (new posts,
   comments, likes, members, refunds, blocks, messages). Docs are in Settings -> API docs.
 - On a single-creator instance the feed is the home page (`/`).

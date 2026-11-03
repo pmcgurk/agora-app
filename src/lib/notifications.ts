@@ -1,5 +1,6 @@
 import { activeSubscriptionWhere } from "@/lib/access";
 import { creatorPath } from "@/lib/creator";
+import { formatMoney } from "@/lib/currency";
 import { prisma } from "@/lib/prisma";
 import { absoluteUrl, emitEvent } from "@/lib/webhooks";
 
@@ -106,6 +107,23 @@ export async function notifyNewMember(patronId: string, tierId: string): Promise
       userId: tier.creator.id,
       type: "member",
       message: `${patron?.name ?? "Someone"} ${tier.price === 0 ? "followed you" : `joined ${tier.name}`}`,
+      href: "/dashboard/members",
+    },
+  ]);
+}
+
+export async function notifyTip(paymentId: string): Promise<void> {
+  const payment = await prisma.payment.findUnique({ where: { id: paymentId } });
+  if (!payment) return;
+  emitEvent(payment.creatorId, "tip.received", {
+    tip: { id: payment.id, amount: payment.amount, currency: payment.currency, message: payment.message },
+    from: { name: payment.tipperName },
+  });
+  await send([
+    {
+      userId: payment.creatorId,
+      type: "tip",
+      message: `${payment.tipperName ?? "Someone"} sent you a ${formatMoney(payment.amount, payment.currency)} tip`,
       href: "/dashboard/members",
     },
   ]);

@@ -24,6 +24,11 @@ enum PaymentStatus {
   REFUNDED
 }
 
+enum PaymentKind {
+  SUBSCRIPTION
+  TIP
+}
+
 enum SubscriptionStatus {
   ACTIVE
   CANCELED
@@ -49,6 +54,8 @@ model User {
   onboardedAt      DateTime?
   // Creators opt in to paid tiers; without it they only have the free Follower tier.
   acceptsPayments  Boolean          @default(false)
+  // Creators can take one-off tips from patrons, independently of paid tiers.
+  tipsEnabled      Boolean          @default(false)
   showPoweredBy    Boolean          @default(true)
   // Google Font choices (keys from src/themes/fonts.ts); null keeps the theme's font.
   fontBody         String?
@@ -109,7 +116,7 @@ model Tier {
   description     String?
   // Turned-off tiers stop accepting new members; existing members keep their access.
   active          Boolean        @default(true)
-  mutes            TierMute[]
+  mutes           TierMute[]
   payments        Payment[]
   dmGatedFor      User[]         @relation("DmTier")
   creator         User           @relation("CreatorTiers", fields: [creatorId], references: [id], onDelete: Cascade)
@@ -229,8 +236,8 @@ model ProfileViewDay {
 
 // Singleton row (id "instance") holding instance-wide switches.
 model InstanceSetting {
-  id        String  @id @default("instance")
-  isPrivate Boolean @default(false)
+  id                  String  @id @default("instance")
+  isPrivate           Boolean @default(false)
   // Stripe credentials entered in Settings; they take precedence over the environment variables.
   stripeSecretKey     String?
   stripeWebhookSecret String?
@@ -282,20 +289,27 @@ model Block {
 
 // Amounts are in minor units. Test checkout records payments too, so refunds work end to end.
 model Payment {
-  id                    String        @id @default(cuid())
-  patronId              String
-  creatorId             String
-  tierId                String?
-  amount                Int
-  currency              String
-  status                PaymentStatus @default(PAID)
-  createdAt             DateTime      @default(now())
-  refundedAt            DateTime?
-  stripePaymentIntentId String?
-  stripeInvoiceId       String?       @unique
-  patron                User          @relation("PatronPayments", fields: [patronId], references: [id], onDelete: Cascade)
-  creator               User          @relation("CreatorPayments", fields: [creatorId], references: [id], onDelete: Cascade)
-  tier                  Tier?         @relation(fields: [tierId], references: [id], onDelete: SetNull)
+  id                      String        @id @default(cuid())
+  // Null for guest tips (made without an account); subscriptions always have a patron.
+  patronId                String?
+  creatorId               String
+  tierId                  String?
+  // Tips are one-off payments with no tier; the tipper may leave a short message.
+  kind                    PaymentKind   @default(SUBSCRIPTION)
+  message                 String?
+  // Name shown to the creator for a tip; null means the tipper chose to stay anonymous.
+  tipperName              String?
+  amount                  Int
+  currency                String
+  status                  PaymentStatus @default(PAID)
+  createdAt               DateTime      @default(now())
+  refundedAt              DateTime?
+  stripePaymentIntentId   String?
+  stripeInvoiceId         String?       @unique
+  stripeCheckoutSessionId String?       @unique
+  patron                  User?         @relation("PatronPayments", fields: [patronId], references: [id], onDelete: Cascade)
+  creator                 User          @relation("CreatorPayments", fields: [creatorId], references: [id], onDelete: Cascade)
+  tier                    Tier?         @relation(fields: [tierId], references: [id], onDelete: SetNull)
 
   @@index([creatorId, createdAt])
   @@index([patronId, creatorId])

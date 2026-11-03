@@ -3,6 +3,7 @@ import { isBlocked } from "@/lib/blocks";
 import { prisma } from "@/lib/prisma";
 import { getStripe, periodEnd } from "@/lib/stripe";
 import { activate } from "@/lib/subscriptions";
+import { MAX_TIP_MESSAGE, MAX_TIPPER_NAME, recordTip } from "@/lib/tips";
 
 // Renewals are normally confirmed by invoice.paid; the grace window only covers a delayed webhook.
 const GRACE_MS = 3 * 24 * 60 * 60 * 1000;
@@ -90,15 +91,47 @@ async function markRefunded(charge: Stripe.Charge): Promise<void> {
   });
 }
 
+// Records a paid one-off tip checkout (from a patron or a guest). A tip from someone who got blocked
+// meanwhile is refunded instead.
+async function recordTipSession(session: Stripe.Checkout.Session): Promise<void> {
+  const { creatorId, message, tipperName } = session.metadata ?? {};
+  if (session.metadata?.kind !== "tip" || session.payment_status !== "paid" || !creatorId) return;
+  const intent = idOf(session.payment_intent);
+  const creator = await prisma.user.findFirst({ where: { id: creatorId, role: "CREATOR" }, select: { id: true } });
+  if (!creator) return;
+  const patron = session.metadata.patronId
+    ? await prisma.user.findUnique({ where: { id: session.metadata.patronId }, select: { id: true } })
+    : null;
+  if (patron && (await isBlocked(creatorId, patron.id))) {
+    if (intent) {
+      await (await getStripe()).refunds.create({ payment_intent: intent }, { idempotencyKey: `refund-tip-${session.id}` });
+    }
+    return;
+  }
+  await recordTip({
+    patronId: patron?.id ?? null,
+    creatorId,
+    amount: session.amount_total ?? 0,
+    currency: session.currency ?? "usd",
+    message: message?.slice(0, MAX_TIP_MESSAGE) || null,
+    tipperName: tipperName?.slice(0, MAX_TIPPER_NAME) || null,
+    stripeCheckoutSessionId: session.id,
+    stripePaymentIntentId: intent,
+  });
+}
+
 export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
   switch (event.type) {
     case "checkout.session.completed": {
       const session = event.data.object;
+      if (session.mode === "payment") return recordTipSession(session);
       const stripeSubId = idOf(session.subscription);
       if (session.mode !== "subscription" || !stripeSubId) return;
       await syncSubscription(await (await getStripe()).subscriptions.retrieve(stripeSubId));
       return;
     }
+    case "checkout.session.async_payment_succeeded":
+      return recordTipSession(event.data.object);
     case "invoice.paid":
       return recordInvoice(event.data.object);
     case "invoice.payment_failed": {

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import EndPlan from "@/components/EndPlan";
 import { subscribe } from "@/app/actions/patron";
 import Flash from "@/components/Flash";
+import TipJar from "@/components/TipJar";
 import { buttonClass, linkClass } from "@/components/ui";
 import { activeSubscriptionWhere } from "@/lib/access";
 import { getCurrentUser } from "@/lib/auth";
@@ -78,6 +79,7 @@ export default async function SupportPage({
           </div>
         ))}
       </div>
+      <TipJar creator={creator} returnTo={`${creatorPath(creator)}/support`} />
     </section>
   );
 }

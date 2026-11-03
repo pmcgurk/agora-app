@@ -88,6 +88,45 @@ export async function createCheckoutUrl(
   return session.url;
 }
 
+type TipOptions = {
+  // Logged-in tippers get a Stripe customer; guests pay as a Stripe guest and enter their email there.
+  patron: { id: string; email: string; name: string; stripeCustomerId: string | null } | null;
+  amount: number;
+  message: string | null;
+  tipperName: string | null;
+};
+
+export async function createTipCheckoutUrl(creator: CreatorRef, returnPath: string, options: TipOptions): Promise<string> {
+  const { patron, amount, message, tipperName } = options;
+  const customer = patron ? await ensureCustomer(patron) : undefined;
+  const base = creatorPath(creator);
+  const metadata: Record<string, string> = { kind: "tip", creatorId: creator.id };
+  if (patron) metadata.patronId = patron.id;
+  if (tipperName) metadata.tipperName = tipperName;
+  if (message) metadata.message = message;
+  const session = await (await getStripe()).checkout.sessions.create({
+    mode: "payment",
+    ...(customer ? { customer } : {}),
+    line_items: [
+      {
+        price_data: {
+          currency: creator.currency.toLowerCase(),
+          unit_amount: amount,
+          product_data: { name: `Tip for ${creator.name}` },
+        },
+        quantity: 1,
+      },
+    ],
+    ...(patron ? { client_reference_id: patron.id } : {}),
+    metadata,
+    payment_intent_data: { metadata },
+    success_url: absoluteUrl(`${base}?notice=${encodeURIComponent("Thanks for your tip!")}`),
+    cancel_url: absoluteUrl(returnPath),
+  });
+  if (!session.url) throw new Error("Stripe did not return a checkout URL.");
+  return session.url;
+}
+
 export async function createPortalUrl(user: { id: string; email: string; name: string; stripeCustomerId: string | null }): Promise<string> {
   const customer = await ensureCustomer(user);
   const session = await (await getStripe()).billingPortal.sessions.create({

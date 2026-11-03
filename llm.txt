@@ -110,6 +110,12 @@ storage). Docker Compose is the deployment baseline.
 - Blocks (`Block`, `blockUser`): blocked users lose tier access (`AccessContext.blocked`), cannot like,
   comment, follow, subscribe, be gifted or message. Payments (`Payment`) are recorded by test checkout;
   `refundPayment` issues the Stripe refund first (when `stripePaymentIntentId` is set), then marks REFUNDED and ends that plan.
+- Tips: `Payment.kind = TIP` (no tier, optional `message`, `tipperName` shown to the creator - null means
+  Anonymous, nullable `patronId` for guests, unique `stripeCheckoutSessionId`), enabled per creator via
+  `User.tipsEnabled`. Guests can tip: `sendTip` (actions/tips.ts, rate limited, blocked on private instances) ->
+  `createTipCheckoutUrl` (Stripe `mode: "payment"`); the webhook's `recordTipSession` (lib/stripe-events.ts) calls
+  `recordTip` (lib/tips.ts), idempotent per checkout session. UI: `components/TipJar.tsx` (feed, Support page,
+  header pill via `tipsAvailable`). Never show a tip's patron account to the creator; use `tipperLabel`.
 - Profile images: `User.avatarKey/bannerKey` (MinIO keys under `profiles/<userId>/`). Upload via
   `POST /api/profile-image` (Origin check, magic-byte sniff, sharp re-encode to WebP), served by
   `/api/avatar/<userId>?kind=` as a 60 s presigned redirect; render with `components/Avatar.tsx`.

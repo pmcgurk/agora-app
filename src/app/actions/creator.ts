@@ -25,6 +25,7 @@ import {
 } from "@/lib/post-media";
 import { notifyNewPost, notifyRefund } from "@/lib/notifications";
 import { formatMoney } from "@/lib/currency";
+import { tipperLabel } from "@/lib/tips";
 import { emitEvent } from "@/lib/webhooks";
 import { prisma } from "@/lib/prisma";
 import { headObject } from "@/lib/s3";
@@ -415,31 +416,33 @@ export async function refundPayment(formData: FormData) {
       backToMembers("error", "Stripe could not refund that payment. Check your Stripe dashboard.");
     }
   }
+  const { patronId, tierId } = payment;
+  const who = payment.kind === "TIP" ? tipperLabel(payment) : (payment.patron?.name ?? "the patron");
   await prisma.$transaction([
     prisma.payment.update({ where: { id: payment.id }, data: { status: "REFUNDED", refundedAt: new Date() } }),
-    ...(payment.tierId
+    ...(patronId && tierId
       ? [
           prisma.subscription.updateMany({
-            where: { patronId: payment.patronId, tierId: payment.tierId, status: "ACTIVE", gifted: false },
+            where: { patronId, tierId, status: "ACTIVE", gifted: false },
             data: { status: "CANCELED", cancelAtPeriodEnd: false },
           }),
         ]
       : []),
   ]);
-  if (payment.tierId) {
+  if (patronId && tierId) {
     const plan = await prisma.subscription.findUnique({
-      where: { patronId_tierId: { patronId: payment.patronId, tierId: payment.tierId } },
+      where: { patronId_tierId: { patronId, tierId } },
       select: { id: true, stripeSubscriptionId: true },
     });
     if (plan?.stripeSubscriptionId) {
       await endPlan(plan.id, { atPeriodEnd: false }).catch((error) => console.error("Could not cancel Stripe plan", error));
     }
   }
-  await notifyRefund(payment.patronId, `${user.name} refunded your ${amount} payment`);
+  if (patronId) await notifyRefund(patronId, `${user.name} refunded your ${amount} payment`);
   emitEvent(user.id, "member.refunded", {
     payment: { id: payment.id, amount: payment.amount, currency: payment.currency },
-    member: { id: payment.patron.id, name: payment.patron.name },
-    tier: payment.tierId ? { id: payment.tierId, name: payment.tier?.name ?? null } : null,
+    member: { id: payment.kind === "TIP" ? null : patronId, name: payment.kind === "TIP" ? payment.tipperName : (payment.patron?.name ?? null) },
+    tier: tierId ? { id: tierId, name: payment.tier?.name ?? null } : null,
   });
-  backToMembers("notice", `Refunded ${amount} to ${payment.patron.name}.`);
+  backToMembers("notice", `Refunded ${amount} to ${who}.`);
 }

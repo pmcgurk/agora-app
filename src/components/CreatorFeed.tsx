@@ -5,11 +5,13 @@ import FeedMedia, { type FeedItem } from "@/components/FeedMedia";
 import LikeButton from "@/components/LikeButton";
 import Markdown from "@/components/Markdown";
 import ShareButton from "@/components/ShareButton";
+import TipJar from "@/components/TipJar";
 import Flash from "@/components/Flash";
 import { buttonClass, cardClass, linkClass } from "@/components/ui";
 import { activeSubscriptionWhere, canView, getAccessContext } from "@/lib/access";
 import { patronCanMessage } from "@/lib/dm";
 import { getCurrentUser } from "@/lib/auth";
+import { getSiteCreator } from "@/lib/instance";
 import { creatorPath, getCreator } from "@/lib/creator";
 import { prisma } from "@/lib/prisma";
 import { recordProfileView } from "@/lib/views";
@@ -70,6 +72,8 @@ export default async function CreatorFeed({
     <>
       {creator.bio && <p className="whitespace-pre-wrap">{creator.bio}</p>}
       <Flash notice={notice} error={error} />
+
+      <TipJar creator={creator} returnTo={(await getSiteCreator())?.id === creator.id ? "/" : base} />
 
       {tiers.length > 0 && (
         <section aria-label="Membership" className={`${cardClass} agora-tier flex flex-wrap items-center justify-between gap-3`}>

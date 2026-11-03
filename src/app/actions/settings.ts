@@ -164,6 +164,16 @@ export async function savePayments(formData: FormData) {
 
 const MAX_TIER_DESCRIPTION = 400;
 
+export async function saveTips(formData: FormData) {
+  const user = await requireUser("CREATOR");
+  const enable = formData.get("tipsEnabled") === "on";
+  if (enable && (await paymentMode()) === "off") {
+    fail("monetization", "Payments are not configured on this instance. Add your Stripe API key first.");
+  }
+  await prisma.user.update({ where: { id: user.id }, data: { tipsEnabled: enable } });
+  done("monetization", enable ? "Tips enabled." : "Tips disabled.");
+}
+
 // Stripe credentials are instance-wide (one Stripe account takes every creator's payments), like the privacy switch.
 export async function saveStripeKeys(formData: FormData) {
   await requireUser("CREATOR");

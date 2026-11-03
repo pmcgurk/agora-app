@@ -7,6 +7,7 @@ import { requireUser } from "@/lib/auth";
 import { formatMoney } from "@/lib/currency";
 import { prisma } from "@/lib/prisma";
 import { getCreatorStats } from "@/lib/stats";
+import { tipperLabel } from "@/lib/tips";
 
 export const dynamic = "force-dynamic";
 
@@ -71,10 +72,11 @@ export default async function MembersPage({
         <ul className="space-y-2">
           {payments.map((payment) => (
             <li key={payment.id} className="agora-payment flex flex-wrap items-center gap-x-3 gap-y-1">
-              <span className="font-medium">{payment.patron.name}</span>
-              <span>{payment.tier?.name ?? "Deleted tier"}</span>
+              <span className="font-medium">{payment.kind === "TIP" ? tipperLabel(payment) : (payment.patron?.name ?? "Unknown")}</span>
+              <span>{payment.kind === "TIP" ? "Tip" : (payment.tier?.name ?? "Deleted tier")}</span>
               <span>{formatMoney(payment.amount, payment.currency)}</span>
               <span className="text-muted">{payment.createdAt.toISOString().slice(0, 10)}</span>
+              {payment.message && <span className="w-full text-muted">&ldquo;{payment.message}&rdquo;</span>}
               {payment.status === "REFUNDED" ? (
                 <span className="ml-auto rounded-full bg-secondary px-2 text-xs">refunded</span>
               ) : (
@@ -83,7 +85,7 @@ export default async function MembersPage({
                     action={refundPayment}
                     fields={{ paymentId: payment.id }}
                     label="Refund"
-                    message={`Refund ${formatMoney(payment.amount, payment.currency)} and end their plan?`}
+                    message={`Refund ${formatMoney(payment.amount, payment.currency)}${payment.kind === "TIP" ? "" : " and end their plan"}?`}
                     confirmLabel="Yes, refund"
                   />
                 </span>

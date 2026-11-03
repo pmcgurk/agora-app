@@ -6,6 +6,7 @@ export const WEBHOOK_EVENTS = [
   { key: "comment.created", label: "New comment or reply" },
   { key: "like.created", label: "Post liked" },
   { key: "member.joined", label: "New follower or subscriber" },
+  { key: "tip.received", label: "Tip received" },
   { key: "member.refunded", label: "Payment refunded" },
   { key: "member.blocked", label: "User blocked" },
   { key: "message.received", label: "New direct message" },

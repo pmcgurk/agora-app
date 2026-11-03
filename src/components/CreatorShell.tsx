@@ -5,7 +5,9 @@ import FontLink from "@/components/FontLink";
 import PoweredBy from "@/components/PoweredBy";
 import { SiteHeader } from "@/components/SiteHeader";
 import ThemeCss from "@/components/ThemeCss";
+import { tipsAvailable } from "@/components/TipJar";
 import { linkClass } from "@/components/ui";
+import { getCurrentUser } from "@/lib/auth";
 import { creatorPath, type getCreator } from "@/lib/creator";
 import { profileImageUrl } from "@/lib/profile-images";
 import { readSocialLinks } from "@/lib/social-links";
@@ -26,6 +28,7 @@ export default async function CreatorShell({
   const ProfileLayout = await loadProfileLayout(creator.themeName);
   const bannerUrl = profileImageUrl(creator, "banner");
   const socialLinks = readSocialLinks(creator.socialLinks);
+  const showTip = (await tipsAvailable(creator)) && (await getCurrentUser())?.id !== creator.id;
 
   return (
     <div data-theme-root style={themeStyle(creator.themeName, creator.themeSettings, creator)} className="min-h-screen">
@@ -61,9 +64,14 @@ export default async function CreatorShell({
               ))}
             </ul>
           )}
-          <nav aria-label="Creator pages" className="mt-3 flex gap-4">
+          <nav aria-label="Creator pages" className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
             <Link href={homeHref} className={linkClass}>Posts</Link>
             <Link href={`${creatorPath(creator)}/support`} className={linkClass}>Support</Link>
+            {showTip && (
+              <Link href={`${homeHref}#tip`} className="agora-tip-link ml-auto rounded-full border border-line px-3 text-sm leading-6 hover:border-primary hover:text-primary">
+                <span aria-hidden="true">♥</span> Tip
+              </Link>
+            )}
           </nav>
         </header>
         {children}
