@@ -11,9 +11,32 @@ export const ALLOWED_MEDIA = {
 } as const;
 
 export type AllowedContentType = keyof typeof ALLOWED_MEDIA;
-export type MediaKindName = "IMAGE" | "VIDEO" | "AUDIO";
+export type MediaKindName = "IMAGE" | "VIDEO" | "AUDIO" | "FILE";
 
-export const ACCEPT_ATTRIBUTE = Object.keys(ALLOWED_MEDIA).join(",");
+// Anything outside the allowlist is stored as a generic downloadable file (e.g. 3D prints, ZIPs, PDFs).
+export const GENERIC_FILE = { extension: "bin", kind: "FILE", contentType: "application/octet-stream" } as const;
+
+export function describeUpload(contentType: string | undefined): { extension: string; kind: MediaKindName; contentType: string } {
+  if (isAllowedContentType(contentType)) return { ...ALLOWED_MEDIA[contentType], contentType };
+  return { ...GENERIC_FILE };
+}
+
+export const MAX_FILE_NAME_LENGTH = 200;
+
+// Strips path pieces and control characters; the name is only ever used as a download label.
+export function cleanFileName(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const name = value.replace(/[\\/]+/g, "_").replace(/[\u0000-\u001f\u007f"]/g, "").trim();
+  return name ? name.slice(0, MAX_FILE_NAME_LENGTH) : null;
+}
+
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+  return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
+}
+
+export const ACCEPT_ATTRIBUTE = "*/*";
 export const MAX_FILES_PER_POST = 20;
 export const MAX_PREVIEW_SECONDS = 120;
 // Images are decoded in memory to build blurred previews, so they get a tighter cap.

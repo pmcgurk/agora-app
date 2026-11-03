@@ -13,8 +13,8 @@ export async function endPlan(subscriptionId: string, options: { atPeriodEnd: bo
   const subscription = await prisma.subscription.findUnique({ where: { id: subscriptionId } });
   if (!subscription) return { endsAt: null };
 
-  if (subscription.stripeSubscriptionId && stripeConfigured()) {
-    const stripe = getStripe();
+  if (subscription.stripeSubscriptionId && (await stripeConfigured())) {
+    const stripe = await getStripe();
     if (options.atPeriodEnd) {
       const updated = await stripe.subscriptions.update(subscription.stripeSubscriptionId, { cancel_at_period_end: true });
       const endsAt = periodEnd(updated);

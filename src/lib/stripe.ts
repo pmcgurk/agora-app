@@ -1,25 +1,30 @@
 import Stripe from "stripe";
 import { creatorPath } from "@/lib/creator";
+import { getStripeConfig } from "@/lib/payments";
 import { prisma } from "@/lib/prisma";
 import { absoluteUrl } from "@/lib/webhooks";
 
-let client: Stripe | undefined;
+let client: { key: string; stripe: Stripe } | undefined;
 
-export function getStripe(): Stripe {
-  if (!client) {
-    const key = process.env.STRIPE_SECRET_KEY;
-    if (!key) throw new Error("STRIPE_SECRET_KEY is not configured.");
+// The client is rebuilt whenever the configured key changes (it can be edited in Settings).
+export async function getStripe(): Promise<Stripe> {
+  const { secretKey } = await getStripeConfig();
+  if (!secretKey) throw new Error("Stripe is not configured.");
+  if (!client || client.key !== secretKey) {
     // STRIPE_API_URL lets a proxy or a local mock stand in for api.stripe.com (used in tests).
     const override = process.env.STRIPE_API_URL ? new URL(process.env.STRIPE_API_URL) : null;
-    client = new Stripe(key, {
-      appInfo: { name: "Agora" },
-      maxNetworkRetries: 2,
-      ...(override
-        ? { host: override.hostname, port: override.port, protocol: override.protocol.replace(":", "") as "http" | "https" }
-        : {}),
-    });
+    client = {
+      key: secretKey,
+      stripe: new Stripe(secretKey, {
+        appInfo: { name: "Agora" },
+        maxNetworkRetries: 2,
+        ...(override
+          ? { host: override.hostname, port: override.port, protocol: override.protocol.replace(":", "") as "http" | "https" }
+          : {}),
+      }),
+    };
   }
-  return client;
+  return client.stripe;
 }
 
 type TierRef = { id: string; name: string; price: number; stripePriceId: string | null };
@@ -28,7 +33,7 @@ type CreatorRef = { id: string; name: string; slug: string | null; currency: str
 // Stripe prices are immutable, so a new one is created whenever the tier's amount or the
 // creator's currency no longer matches the stored one.
 export async function ensureStripePrice(tier: TierRef, creator: CreatorRef): Promise<string> {
-  const stripe = getStripe();
+  const stripe = await getStripe();
   const currency = creator.currency.toLowerCase();
   if (tier.stripePriceId) {
     try {
@@ -53,7 +58,7 @@ export async function ensureStripePrice(tier: TierRef, creator: CreatorRef): Pro
 
 export async function ensureCustomer(user: { id: string; email: string; name: string; stripeCustomerId: string | null }): Promise<string> {
   if (user.stripeCustomerId) return user.stripeCustomerId;
-  const customer = await getStripe().customers.create(
+  const customer = await (await getStripe()).customers.create(
     { email: user.email, name: user.name, metadata: { userId: user.id } },
     { idempotencyKey: `customer-${user.id}` },
   );
@@ -69,7 +74,7 @@ export async function createCheckoutUrl(
   const [price, customer] = await Promise.all([ensureStripePrice(tier, creator), ensureCustomer(patron)]);
   const base = creatorPath(creator);
   const metadata = { patronId: patron.id, tierId: tier.id };
-  const session = await getStripe().checkout.sessions.create({
+  const session = await (await getStripe()).checkout.sessions.create({
     mode: "subscription",
     customer,
     line_items: [{ price, quantity: 1 }],
@@ -85,7 +90,7 @@ export async function createCheckoutUrl(
 
 export async function createPortalUrl(user: { id: string; email: string; name: string; stripeCustomerId: string | null }): Promise<string> {
   const customer = await ensureCustomer(user);
-  const session = await getStripe().billingPortal.sessions.create({
+  const session = await (await getStripe()).billingPortal.sessions.create({
     customer,
     return_url: absoluteUrl("/settings/subscriptions"),
   });

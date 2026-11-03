@@ -1,14 +1,47 @@
+import { cache } from "react";
+import { prisma } from "@/lib/prisma";
+
 export type PaymentMode = "stripe" | "test" | "off";
 
-const STRIPE_KEY_PATTERN = /^(sk|rk)_(test|live)_[A-Za-z0-9]{8,}$/;
+export const STRIPE_KEY_PATTERN = /^(sk|rk)_(test|live)_[A-Za-z0-9]{8,}$/;
+export const STRIPE_WEBHOOK_SECRET_PATTERN = /^whsec_[A-Za-z0-9+/=_-]{8,}$/;
 
-export const stripeConfigured = () => STRIPE_KEY_PATTERN.test(process.env.STRIPE_SECRET_KEY ?? "");
+export type StripeConfig = {
+  secretKey: string | null;
+  webhookSecret: string | null;
+  // Where the secret key comes from: saved in Settings, the environment, or nowhere.
+  source: "settings" | "env" | null;
+};
+
+// Keys saved from the settings panel win over the STRIPE_* environment variables.
+export const getStripeConfig = cache(async (): Promise<StripeConfig> => {
+  const row = await prisma.instanceSetting.findUnique({
+    where: { id: "instance" },
+    select: { stripeSecretKey: true, stripeWebhookSecret: true },
+  });
+  if (row?.stripeSecretKey && STRIPE_KEY_PATTERN.test(row.stripeSecretKey)) {
+    return {
+      secretKey: row.stripeSecretKey,
+      webhookSecret: row.stripeWebhookSecret ?? process.env.STRIPE_WEBHOOK_SECRET ?? null,
+      source: "settings",
+    };
+  }
+  const envKey = process.env.STRIPE_SECRET_KEY ?? "";
+  if (STRIPE_KEY_PATTERN.test(envKey)) {
+    return { secretKey: envKey, webhookSecret: process.env.STRIPE_WEBHOOK_SECRET ?? null, source: "env" };
+  }
+  return { secretKey: null, webhookSecret: null, source: null };
+});
+
+export async function stripeConfigured(): Promise<boolean> {
+  return (await getStripeConfig()).secretKey !== null;
+}
 
 // Stripe wins when a real key is set. Otherwise paid tiers use the no-money test checkout only
 // while ALLOW_FREE_SUBSCRIPTIONS=true; with neither, only the free tier can be joined.
-export function paymentMode(): PaymentMode {
-  if (stripeConfigured()) return "stripe";
+export async function paymentMode(): Promise<PaymentMode> {
+  if (await stripeConfigured()) return "stripe";
   return process.env.ALLOW_FREE_SUBSCRIPTIONS === "true" ? "test" : "off";
 }
 
-export const testCheckoutEnabled = () => paymentMode() === "test";
+export const testCheckoutEnabled = async () => (await paymentMode()) === "test";

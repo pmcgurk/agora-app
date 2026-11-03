@@ -15,11 +15,11 @@ export default async function CheckoutPage({ params }: { params: Promise<{ id: s
   const creator = await getCreator(id);
   if (!creator) notFound();
   const tier = await prisma.tier.findFirst({ where: { id: tierId, creatorId: creator.id } });
-  if (!tier || tier.price === 0) notFound();
+  if (!tier || tier.price === 0 || !tier.active) notFound();
 
   const viewer = await getCurrentUser();
   if (!viewer) redirect("/login");
-  if (viewer.role !== "PATRON" || !testCheckoutEnabled()) redirect(creatorPath(creator));
+  if (viewer.role !== "PATRON" || !(await testCheckoutEnabled())) redirect(creatorPath(creator));
 
   return (
     <section className={`${cardClass} mx-auto max-w-md space-y-4`}>

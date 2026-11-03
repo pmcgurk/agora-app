@@ -6,6 +6,8 @@ import { addComment, deleteComment } from "@/app/actions/social";
 import LikeButton from "@/components/LikeButton";
 import CommentForm from "@/components/CommentForm";
 import LockedMedia from "@/components/LockedMedia";
+import Markdown from "@/components/Markdown";
+import ShareButton from "@/components/ShareButton";
 import MediaView from "@/components/MediaView";
 import { linkClass } from "@/components/ui";
 import { canView, getAccessContext } from "@/lib/access";
@@ -28,7 +30,7 @@ export default async function PostPage({ params }: { params: Promise<{ id: strin
       minTier: { select: { name: true, price: true } },
       media: {
         orderBy: { position: "asc" },
-        select: { id: true, kind: true, blurObjectKey: true, previewObjectKey: true, thumbBlurObjectKey: true },
+        select: { id: true, kind: true, fileName: true, size: true, blurObjectKey: true, previewObjectKey: true, thumbBlurObjectKey: true },
       },
       _count: { select: { likes: true, comments: true } },
     },
@@ -102,8 +104,8 @@ export default async function PostPage({ params }: { params: Promise<{ id: strin
 
       {unlocked ? (
         <>
-          {post.textContent && <p className="whitespace-pre-wrap">{post.textContent}</p>}
-          <div className="space-y-3">{post.media.map((item) => <MediaView key={item.id} item={item} />)}</div>
+          {post.textContent && <Markdown source={post.textContent} />}
+          <div className="space-y-3">{post.media.map((item) => <MediaView key={item.id} item={{ ...item, size: Number(item.size) }} />)}</div>
         </>
       ) : (
         <>
@@ -115,7 +117,7 @@ export default async function PostPage({ params }: { params: Promise<{ id: strin
             {post.media.map((item) => (
               <LockedMedia
                 key={item.id}
-                item={item}
+                item={{ ...item, size: Number(item.size) }}
                 canBlur={post.allowBlurPreview && item.blurObjectKey !== null}
                 previewSeconds={item.previewObjectKey ? post.previewSeconds : null}
                 hasThumbnail={item.thumbBlurObjectKey !== null}
@@ -135,6 +137,7 @@ export default async function PostPage({ params }: { params: Promise<{ id: strin
           />
         )}
         <span className="text-sm text-muted">{post._count.comments} comment{post._count.comments === 1 ? "" : "s"}</span>
+        <ShareButton path={`${creatorPath(creator)}/posts/${post.id}`} title={post.title} />
       </div>
 
       <section id="comments" aria-label="Comments" className="space-y-3">

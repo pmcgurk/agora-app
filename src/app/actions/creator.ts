@@ -7,13 +7,14 @@ import { activeSubscriptionWhere } from "@/lib/access";
 import { requireUser } from "@/lib/auth";
 import { isBlocked } from "@/lib/blocks";
 import {
-  ALLOWED_MEDIA,
-  isAllowedContentType,
+  cleanFileName,
+  describeUpload,
   MAX_FILES_PER_POST,
   MAX_IMAGE_BYTES,
   MAX_PREVIEW_SECONDS,
   maxUploadBytes,
   uploadKeyPrefix,
+  type MediaKindName,
 } from "@/lib/media";
 import {
   allKeysOf,
@@ -30,34 +31,40 @@ import { headObject } from "@/lib/s3";
 
 export type PostFormState = { error?: string };
 
-type MediaItem = { id: string } | { key: string };
+type MediaItem = { id: string } | { key: string; name: string | null };
 
 function text(formData: FormData, name: string): string {
   const value = formData.get(name);
   return typeof value === "string" ? value.trim() : "";
 }
 
-type VerifiedUpload = { key: string; contentType: keyof typeof ALLOWED_MEDIA; size: number };
+type VerifiedUpload = { key: string; contentType: string; kind: MediaKindName; size: number; fileName: string | null };
 
 // Uploads go browser -> MinIO directly; before attaching, confirm each object exists, belongs
 // to this creator, is not already attached to a post and is within the limits.
-async function verifyUploads(creatorId: string, keys: string[]): Promise<VerifiedUpload[] | string> {
+async function verifyUploads(creatorId: string, uploads: { key: string; name: string | null }[]): Promise<VerifiedUpload[] | string> {
   const keyPattern = new RegExp(`^${uploadKeyPrefix(creatorId)}[0-9a-f-]{36}\\.[a-z0-9]{2,4}$`);
   const verified: VerifiedUpload[] = [];
-  for (const key of keys) {
+  for (const { key, name } of uploads) {
     if (!keyPattern.test(key)) return "Invalid upload.";
     if (await prisma.postMedia.findFirst({ where: { objectKey: key }, select: { id: true } })) {
       return "That file is already attached to a post.";
     }
     const head = await headObject(key);
     if (!head) return "An uploaded file is missing. Remove it and upload it again.";
-    if (!isAllowedContentType(head.contentType)) return "Unsupported file type.";
-    const limit = ALLOWED_MEDIA[head.contentType].kind === "IMAGE" ? MAX_IMAGE_BYTES : maxUploadBytes();
+    const described = describeUpload(head.contentType);
+    const limit = described.kind === "IMAGE" ? MAX_IMAGE_BYTES : maxUploadBytes();
     if (head.size > limit) {
       await deleteObjects([key]);
       return "A file exceeded the size limit.";
     }
-    verified.push({ key, contentType: head.contentType, size: head.size });
+    verified.push({
+      key,
+      contentType: described.contentType,
+      kind: described.kind,
+      size: head.size,
+      fileName: described.kind === "FILE" ? (cleanFileName(name) ?? "file") : null,
+    });
   }
   return verified;
 }
@@ -75,11 +82,11 @@ function parseItems(raw: string): MediaItem[] | string {
   const items: MediaItem[] = [];
   const seen = new Set<string>();
   for (const entry of parsed) {
-    const value = entry as { id?: unknown; key?: unknown };
+    const value = entry as { id?: unknown; key?: unknown; name?: unknown };
     const identifier = typeof value?.id === "string" ? value.id : typeof value?.key === "string" ? value.key : null;
     if (!identifier || seen.has(identifier)) return "Invalid media list.";
     seen.add(identifier);
-    items.push(typeof value.id === "string" ? { id: value.id } : { key: value.key as string });
+    items.push(typeof value.id === "string" ? { id: value.id } : { key: value.key as string, name: cleanFileName(value.name) });
   }
   return items;
 }
@@ -129,7 +136,7 @@ export async function createPost(_previous: PostFormState, formData: FormData): 
 
   const uploads = await verifyUploads(
     user.id,
-    form.items.map((item) => ("key" in item ? item.key : "")),
+    form.items.map((item) => ("key" in item ? item : { key: "", name: null })),
   );
   if (typeof uploads === "string") return { error: uploads };
 
@@ -143,7 +150,7 @@ export async function createPost(_previous: PostFormState, formData: FormData): 
   try {
     const media = [];
     for (const [position, upload] of uploads.entries()) {
-      const { kind } = ALLOWED_MEDIA[upload.contentType];
+      const { kind } = upload;
       const result = await syncDerivatives(
         user.id,
         { kind, objectKey: upload.key, ...NO_DERIVATIVES },
@@ -154,6 +161,7 @@ export async function createPost(_previous: PostFormState, formData: FormData): 
         position,
         kind,
         contentType: upload.contentType,
+        fileName: upload.fileName,
         size: BigInt(upload.size),
         objectKey: upload.key,
         ...result.next,
@@ -203,7 +211,7 @@ export async function updatePost(_previous: PostFormState, formData: FormData): 
 
   const uploads = await verifyUploads(
     user.id,
-    form.items.flatMap((item) => ("key" in item ? [item.key] : [])),
+    form.items.flatMap((item) => ("key" in item ? [item] : [])),
   );
   if (typeof uploads === "string") return { error: uploads };
   const uploadByKey = new Map(uploads.map((upload) => [upload.key, upload]));
@@ -227,7 +235,7 @@ export async function updatePost(_previous: PostFormState, formData: FormData): 
         updates.push(prisma.postMedia.update({ where: { id: item.id }, data: { position, ...result.next } }));
       } else {
         const upload = uploadByKey.get(item.key)!;
-        const { kind } = ALLOWED_MEDIA[upload.contentType];
+        const { kind } = upload;
         const result = await syncDerivatives(user.id, { kind, objectKey: upload.key, ...NO_DERIVATIVES }, teasers);
         created.push(...result.created);
         additions.push({
@@ -235,6 +243,7 @@ export async function updatePost(_previous: PostFormState, formData: FormData): 
           position,
           kind,
           contentType: upload.contentType,
+          fileName: upload.fileName,
           size: BigInt(upload.size),
           objectKey: upload.key,
           ...result.next,
@@ -397,7 +406,7 @@ export async function refundPayment(formData: FormData) {
   const amount = formatMoney(payment.amount, payment.currency);
   if (payment.stripePaymentIntentId) {
     try {
-      await getStripe().refunds.create(
+      await (await getStripe()).refunds.create(
         { payment_intent: payment.stripePaymentIntentId },
         { idempotencyKey: `refund-${payment.id}` },
       );

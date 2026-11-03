@@ -3,7 +3,7 @@
 import { useActionState, useCallback, useEffect, useRef, useState } from "react";
 import { createPost, updatePost, type PostFormState } from "@/app/actions/creator";
 import { buttonClass, inputClass } from "@/components/ui";
-import { ACCEPT_ATTRIBUTE, isAllowedContentType, MAX_FILES_PER_POST } from "@/lib/media";
+import { ACCEPT_ATTRIBUTE, describeUpload, formatBytes as formatSize, MAX_FILES_PER_POST, type MediaKindName } from "@/lib/media";
 
 type Tier = { id: string; name: string; price: number };
 
@@ -15,7 +15,7 @@ export type ExistingPost = {
   previewSeconds: number | null;
   allowBlurPreview: boolean;
   clearThumbnail: boolean;
-  media: { id: string; kind: "IMAGE" | "VIDEO" | "AUDIO" }[];
+  media: { id: string; kind: MediaKindName; fileName?: string | null }[];
 };
 
 type Item = {
@@ -24,7 +24,7 @@ type Item = {
   existingId?: string;
   name: string;
   size: number | null;
-  kind: "IMAGE" | "VIDEO" | "AUDIO";
+  kind: MediaKindName;
   previewUrl: string | null;
   status: "queued" | "uploading" | "done" | "error";
   progress: number;
@@ -33,12 +33,6 @@ type Item = {
 };
 
 const MAX_PARALLEL_UPLOADS = 3;
-
-function formatSize(bytes: number): string {
-  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
-  if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
-  return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
-}
 
 // Step 1: ask the app for a presigned PUT URL. Step 2: send the bytes straight to MinIO.
 function uploadFile(
@@ -53,13 +47,13 @@ function uploadFile(
       body: JSON.stringify({ contentType: file.type, size: file.size }),
     })
       .then(async (response) => {
-        const body = (await response.json().catch(() => ({}))) as { key?: string; url?: string; error?: string };
+        const body = (await response.json().catch(() => ({}))) as { key?: string; url?: string; contentType?: string; error?: string };
         if (!response.ok || !body.key || !body.url) throw new Error(body.error ?? "Could not start the upload.");
 
         const xhr = new XMLHttpRequest();
         register(() => xhr.abort());
         xhr.open("PUT", body.url);
-        xhr.setRequestHeader("Content-Type", file.type);
+        xhr.setRequestHeader("Content-Type", body.contentType ?? file.type);
         xhr.upload.onprogress = (event) => {
           if (event.lengthComputable) onProgress(event.loaded / event.total);
         };
@@ -79,7 +73,7 @@ export default function PostComposer({ tiers, post }: { tiers: Tier[]; post?: Ex
     (post?.media ?? []).map((media) => ({
       id: media.id,
       existingId: media.id,
-      name: `Attached ${media.kind.toLowerCase()}`,
+      name: media.fileName ?? `Attached ${media.kind.toLowerCase()}`,
       size: null,
       kind: media.kind,
       previewUrl: media.kind === "IMAGE" ? `/api/media/${media.id}` : null,
@@ -128,31 +122,20 @@ export default function PostComposer({ tiers, post }: { tiers: Tier[]; post?: Ex
 
   function addFiles(fileList: FileList | File[]) {
     const accepted: Item[] = [];
-    const rejected: string[] = [];
     for (const file of Array.from(fileList)) {
-      if (!isAllowedContentType(file.type)) {
-        rejected.push(file.name);
-        continue;
-      }
       accepted.push({
         id: crypto.randomUUID(),
         file,
         name: file.name,
         size: file.size,
-        kind: file.type.startsWith("image/") ? ("IMAGE" as const) : file.type.startsWith("video/") ? ("VIDEO" as const) : ("AUDIO" as const),
-        previewUrl: file.type.startsWith("image/") ? URL.createObjectURL(file) : null,
+        kind: describeUpload(file.type).kind,
+        previewUrl: file.type.startsWith("image/") && describeUpload(file.type).kind === "IMAGE" ? URL.createObjectURL(file) : null,
         status: "queued",
         progress: 0,
       });
     }
     const room = MAX_FILES_PER_POST - items.length;
-    setNotice(
-      rejected.length
-        ? `Skipped unsupported files: ${rejected.join(", ")}`
-        : accepted.length > room
-          ? `Only ${MAX_FILES_PER_POST} files fit in one post.`
-          : null,
-    );
+    setNotice(accepted.length > room ? `Only ${MAX_FILES_PER_POST} files fit in one post.` : null);
     const added = accepted.slice(0, room);
     setItems((current) => [...current, ...added]);
     queue.current.push(...added);
@@ -189,7 +172,7 @@ export default function PostComposer({ tiers, post }: { tiers: Tier[]; post?: Ex
   const failed = items.some((item) => item.status === "error");
   const mediaList = items
     .filter((item) => item.status === "done")
-    .map((item) => (item.existingId ? { id: item.existingId } : { key: item.key }));
+    .map((item) => (item.existingId ? { id: item.existingId } : { key: item.key, name: item.name }));
 
   return (
     <form action={formAction} className="space-y-4">
@@ -199,7 +182,7 @@ export default function PostComposer({ tiers, post }: { tiers: Tier[]; post?: Ex
         <input name="title" required maxLength={150} defaultValue={post?.title} className={inputClass} />
       </label>
       <label className="block">
-        Text
+        Text <span className="text-sm text-muted">(Markdown supported: **bold**, *italic*, [links](https://…), lists, # headings)</span>
         <textarea name="textContent" rows={4} defaultValue={post?.textContent ?? ""} className={inputClass} />
       </label>
 
@@ -218,7 +201,7 @@ export default function PostComposer({ tiers, post }: { tiers: Tier[]; post?: Ex
           }}
           className={`rounded-theme border-2 border-dashed p-6 text-center ${dragging ? "border-primary bg-secondary" : "border-line"}`}
         >
-          <p>Drag photos, videos or audio here, or</p>
+          <p>Drag any files here (photos, video, audio, 3D prints, documents…), or</p>
           <button type="button" className={`${buttonClass} mt-2`} onClick={() => inputRef.current?.click()}>
             Choose files
           </button>
@@ -246,7 +229,7 @@ export default function PostComposer({ tiers, post }: { tiers: Tier[]; post?: Ex
                   <img src={item.previewUrl} alt="" className="h-12 w-12 rounded-theme object-cover" />
                 ) : (
                   <span className="flex h-12 w-12 items-center justify-center rounded-theme bg-secondary text-xs">
-                    {item.kind === "VIDEO" ? "VIDEO" : "AUDIO"}
+                    {item.kind === "VIDEO" ? "VIDEO" : item.kind === "AUDIO" ? "AUDIO" : "FILE"}
                   </span>
                 )}
                 <div className="min-w-0 flex-1">

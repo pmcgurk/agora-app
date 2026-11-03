@@ -70,8 +70,8 @@ function ProfileStep({ user }: { user: { name: string; slug: string | null; tagl
   );
 }
 
-function PaymentsStep({ currency }: { currency: string }) {
-  const available = paymentMode() !== "off";
+async function PaymentsStep({ currency }: { currency: string }) {
+  const available = (await paymentMode()) !== "off";
   return (
     <>
       <header>
@@ -113,8 +113,8 @@ function PaymentsStep({ currency }: { currency: string }) {
           </>
         ) : (
           <p role="note" className="rounded-theme bg-secondary p-3">
-            No payment provider is configured on this instance, so you will start with followers only. Set{" "}
-            <code>STRIPE_SECRET_KEY</code>, then enable paid tiers in Settings &gt; Monetization.
+            No payment provider is configured on this instance, so you will start with followers only. Add your
+            Stripe API key in Settings &gt; Monetization, then enable paid tiers there.
           </p>
         )}
         <div className="flex gap-3">

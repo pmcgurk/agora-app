@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { createBlurredImage, createVideoPreview, createVideoThumbnail } from "@/lib/derivatives";
 import { prisma } from "@/lib/prisma";
+import type { MediaKindName } from "@/lib/media";
 import { deleteObject } from "@/lib/s3";
 
 export type Derivatives = {
@@ -28,7 +29,7 @@ export type TeaserSettings = {
 // `created` if the database write fails and `obsolete` once it succeeds.
 export async function syncDerivatives(
   creatorId: string,
-  item: { kind: "IMAGE" | "VIDEO" | "AUDIO"; objectKey: string } & Derivatives,
+  item: { kind: MediaKindName; objectKey: string } & Derivatives,
   settings: TeaserSettings,
 ): Promise<{ next: Derivatives; created: string[]; obsolete: string[] }> {
   const created: string[] = [];

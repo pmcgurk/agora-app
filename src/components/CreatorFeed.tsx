@@ -3,6 +3,8 @@ import Link from "next/link";
 import { after } from "next/server";
 import FeedMedia, { type FeedItem } from "@/components/FeedMedia";
 import LikeButton from "@/components/LikeButton";
+import Markdown from "@/components/Markdown";
+import ShareButton from "@/components/ShareButton";
 import Flash from "@/components/Flash";
 import { buttonClass, cardClass, linkClass } from "@/components/ui";
 import { activeSubscriptionWhere, canView, getAccessContext } from "@/lib/access";
@@ -36,7 +38,7 @@ export default async function CreatorFeed({
         minTier: { select: { name: true, price: true } },
         media: {
           orderBy: { position: "asc" },
-          select: { id: true, kind: true, blurObjectKey: true, previewObjectKey: true, thumbBlurObjectKey: true },
+          select: { id: true, kind: true, fileName: true, size: true, blurObjectKey: true, previewObjectKey: true, thumbBlurObjectKey: true },
         },
         _count: { select: { likes: true, comments: true, media: true } },
       },
@@ -97,6 +99,8 @@ export default async function CreatorFeed({
           const items: FeedItem[] = post.media.map((item) => ({
             id: item.id,
             kind: item.kind,
+            fileName: item.fileName,
+            size: Number(item.size),
             canBlur: post.allowBlurPreview && item.blurObjectKey !== null,
             previewSeconds: item.previewObjectKey ? post.previewSeconds : null,
             hasThumbnail: item.thumbBlurObjectKey !== null,
@@ -112,7 +116,7 @@ export default async function CreatorFeed({
                 {unlocked ? "" : " · locked"}
               </p>
               {unlocked && post.textContent && (
-                <p className="mt-2 line-clamp-4 whitespace-pre-wrap">{post.textContent}</p>
+                <Markdown source={post.textContent} className="mt-2 max-h-48 overflow-hidden" />
               )}
               <FeedMedia items={items} unlocked={unlocked} />
               <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-muted">
@@ -131,6 +135,7 @@ export default async function CreatorFeed({
                   <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"><path d="M21 12a8 8 0 0 1-11.8 7L3 20.5l1.5-5.2A8 8 0 1 1 21 12z" /></svg>
                   {post._count.comments}
                 </Link>
+                <ShareButton path={`${base}/posts/${post.id}`} title={post.title} />
                 <Link href={`${base}/posts/${post.id}`} className={`${linkClass} ml-auto`}>
                   {unlocked ? "Open" : "View teaser"}
                 </Link>

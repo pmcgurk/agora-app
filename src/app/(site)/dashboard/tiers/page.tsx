@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { createTier, updateTier } from "@/app/actions/settings";
+import { createTier, deleteTier, setTierActive, updateTier } from "@/app/actions/settings";
 import Flash from "@/components/Flash";
 import { buttonClass, inputClass, linkClass } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
@@ -68,11 +68,25 @@ export default async function TiersPage({
               <textarea name="description" rows={2} maxLength={400} defaultValue={tier.description ?? ""} className={inputClass} />
             </label>
             <button className={buttonClass}>Save</button>
+            {tier.price > 0 && (
+              <>
+                <span className="pb-2 text-sm text-muted">{tier.active ? "On" : "Off (no new members)"}</span>
+                <button
+                  formAction={setTierActive}
+                  name="active"
+                  value={tier.active ? "0" : "1"}
+                  className={buttonClass}
+                >
+                  {tier.active ? "Turn off" : "Turn on"}
+                </button>
+                <button formAction={deleteTier} className={buttonClass}>Delete</button>
+              </>
+            )}
           </form>
         ))}
       </section>
 
-      {user.acceptsPayments && paymentMode() !== "off" ? (
+      {user.acceptsPayments && (await paymentMode()) !== "off" ? (
         <section className="space-y-3">
           <h2 className="text-xl font-semibold">New tier</h2>
           <form action={createTier} className="flex flex-wrap items-end gap-3">

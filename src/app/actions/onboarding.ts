@@ -102,7 +102,7 @@ export async function finishOnboarding(formData: FormData) {
 
   let tier: { name: string; price: number; description: string | null } | null = null;
   if (acceptsPayments) {
-    if (paymentMode() === "off") failAt("/onboarding", "Payments are not configured on this instance, so only followers are available.");
+    if ((await paymentMode()) === "off") failAt("/onboarding", "Payments are not configured on this instance, so only followers are available.");
     const tierName = text(formData, "tierName");
     const priceInput = text(formData, "tierPrice");
     const description = text(formData, "tierDescription");

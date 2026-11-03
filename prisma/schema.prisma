@@ -16,6 +16,7 @@ enum MediaKind {
   IMAGE
   VIDEO
   AUDIO
+  FILE
 }
 
 enum PaymentStatus {
@@ -65,6 +66,8 @@ model User {
   // Object keys in MinIO (never URLs); served through /api/avatar/<userId>.
   avatarKey        String?
   bannerKey        String?
+  // Social profile links keyed by platform (see src/lib/social-links.ts).
+  socialLinks      Json?
   stripeCustomerId String?          @unique
   blocksMade       Block[]          @relation("BlocksMade")
   blockedBy        Block[]          @relation("BlockedBy")
@@ -104,7 +107,9 @@ model Tier {
   price           Int
   stripePriceId   String?
   description     String?
-  mutes           TierMute[]
+  // Turned-off tiers stop accepting new members; existing members keep their access.
+  active          Boolean        @default(true)
+  mutes            TierMute[]
   payments        Payment[]
   dmGatedFor      User[]         @relation("DmTier")
   creator         User           @relation("CreatorTiers", fields: [creatorId], references: [id], onDelete: Cascade)
@@ -164,6 +169,8 @@ model PostMedia {
   contentType        String
   size               BigInt
   objectKey          String
+  // Original file name, kept for generic FILE attachments (downloads).
+  fileName           String?
   // Server-generated derivatives, safe to show to viewers who cannot see the original.
   blurObjectKey      String?
   previewObjectKey   String?
@@ -224,6 +231,9 @@ model ProfileViewDay {
 model InstanceSetting {
   id        String  @id @default("instance")
   isPrivate Boolean @default(false)
+  // Stripe credentials entered in Settings; they take precedence over the environment variables.
+  stripeSecretKey     String?
+  stripeWebhookSecret String?
 }
 
 model Notification {

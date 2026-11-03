@@ -59,12 +59,15 @@ export async function GET(request: Request, { params }: { params: Promise<{ medi
   const result = await streamObject(objectKey, request.headers.get("range"), request.signal);
   if (result === null) return new NextResponse(null, { status: 404 });
   if (result === "unsatisfiable") return new NextResponse(null, { status: 416, headers: NO_STORE });
+  const download = media.kind === "FILE";
   return new NextResponse(result.body, {
     status: result.status,
     headers: {
       ...result.headers,
       ...NO_STORE,
-      "Content-Disposition": "inline",
+      // Generic files are never rendered by the browser: they always download as opaque bytes.
+      ...(download ? { "Content-Type": "application/octet-stream" } : {}),
+      "Content-Disposition": download ? `attachment; filename*=UTF-8''${encodeURIComponent(media.fileName ?? "download")}` : "inline",
       "X-Content-Type-Options": "nosniff",
     },
   });

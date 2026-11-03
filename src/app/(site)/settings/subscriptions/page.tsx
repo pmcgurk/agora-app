@@ -46,7 +46,7 @@ export default async function SubscriptionSettings({
         ))}
         {subscriptions.length === 0 && <li className="text-muted">You are not following anyone yet.</li>}
       </ul>
-      {paymentMode() === "stripe" && subscriptions.some((subscription) => subscription.tier.price > 0 && !subscription.gifted) && (
+      {(await paymentMode()) === "stripe" && subscriptions.some((subscription) => subscription.tier.price > 0 && !subscription.gifted) && (
         <form action={openBillingPortal}>
           <button className="text-sm underline">Manage billing and invoices</button>
         </form>

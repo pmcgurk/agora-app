@@ -3,9 +3,12 @@
 import { redirect } from "next/navigation";
 import { Prisma } from "@/generated/prisma/client";
 import { destroyOtherSessions, requireUser } from "@/lib/auth";
+import { activeSubscriptionWhere } from "@/lib/access";
+import { getStripe } from "@/lib/stripe";
+import { normalizeSocialLink, SOCIAL_PLATFORMS } from "@/lib/social-links";
 import { isSupportedCurrency } from "@/lib/currency";
 import { hashPassword, verifyPassword } from "@/lib/password";
-import { paymentMode } from "@/lib/payments";
+import { paymentMode, STRIPE_KEY_PATTERN, STRIPE_WEBHOOK_SECRET_PATTERN, stripeConfigured } from "@/lib/payments";
 import { prisma } from "@/lib/prisma";
 import { FEDIVERSE_PATTERN, SLUG_PATTERN } from "@/lib/profile-fields";
 import { setInstancePrivate } from "@/lib/instance";
@@ -61,9 +64,25 @@ export async function saveProfile(formData: FormData) {
     fail("profile", "Enter a fediverse handle like @name@example.social.");
   }
 
+  const socialLinks: Record<string, string> = {};
+  for (const platform of SOCIAL_PLATFORMS) {
+    const raw = text(formData, `social-${platform.key}`);
+    if (!raw) continue;
+    const url = normalizeSocialLink(platform, raw);
+    if (!url) fail("profile", `Enter a valid ${platform.label} link or username.`);
+    socialLinks[platform.key] = url;
+  }
+
   await prisma.user.update({
     where: { id: user.id },
-    data: { name, slug: slug || null, tagline: tagline || null, bio: bio || null, fediverseHandle: fediverseHandle || null },
+    data: {
+      name,
+      slug: slug || null,
+      tagline: tagline || null,
+      bio: bio || null,
+      fediverseHandle: fediverseHandle || null,
+      socialLinks: Object.keys(socialLinks).length > 0 ? socialLinks : Prisma.DbNull,
+    },
   });
   done("profile");
 }
@@ -133,17 +152,54 @@ export async function saveCurrency(formData: FormData) {
 export async function savePayments(formData: FormData) {
   const user = await requireUser("CREATOR");
   const enable = formData.get("acceptsPayments") === "on";
-  if (enable && paymentMode() === "off") {
-    fail("monetization", "Payments are not configured on this instance. Set STRIPE_SECRET_KEY first.");
+  if (enable && (await paymentMode()) === "off") {
+    fail("monetization", "Payments are not configured on this instance. Add your Stripe API key first.");
   }
-  if (!enable && (await prisma.tier.count({ where: { creatorId: user.id, price: { gt: 0 } } })) > 0) {
-    fail("monetization", "Payments can't be turned off while you have paid tiers.");
+  if (!enable && (await prisma.tier.count({ where: { creatorId: user.id,   price: { gt: 0 }, active: true } })) > 0) {
+      fail("monetization", "Payments can't be turned off while you have active paid tiers. Turn them off or delete them first.");
   }
   await prisma.user.update({ where: { id: user.id }, data: { acceptsPayments: enable } });
   done("monetization", enable ? "Paid tiers enabled." : "Paid tiers disabled.");
 }
 
 const MAX_TIER_DESCRIPTION = 400;
+
+// Stripe credentials are instance-wide (one Stripe account takes every creator's payments), like the privacy switch.
+export async function saveStripeKeys(formData: FormData) {
+  await requireUser("CREATOR");
+  const secretKey = text(formData, "stripeSecretKey");
+  const webhookSecret = text(formData, "stripeWebhookSecret");
+  const current = await prisma.instanceSetting.findUnique({ where: { id: "instance" } });
+
+  if (!secretKey && !current?.stripeSecretKey) fail("monetization", "Paste your Stripe secret key (starts with sk_ or rk_).");
+  if (secretKey && !STRIPE_KEY_PATTERN.test(secretKey)) {
+    fail("monetization", "That doesn't look like a Stripe secret key. It should start with sk_test_, sk_live_, rk_test_ or rk_live_.");
+  }
+  if (webhookSecret && !STRIPE_WEBHOOK_SECRET_PATTERN.test(webhookSecret)) {
+    fail("monetization", "The webhook signing secret should start with whsec_.");
+  }
+
+  // Blank fields keep the saved value, so the stored secrets never need to be shown again.
+  const data = {
+    ...(secretKey ? { stripeSecretKey: secretKey } : {}),
+    ...(webhookSecret ? { stripeWebhookSecret: webhookSecret } : {}),
+  };
+  await prisma.instanceSetting.upsert({
+    where: { id: "instance" },
+    update: data,
+    create: { id: "instance", ...data },
+  });
+  done("monetization", "Stripe settings saved.");
+}
+
+export async function removeStripeKeys() {
+  const user = await requireUser("CREATOR");
+  if ((await prisma.tier.count({ where: { creatorId: user.id, price: { gt: 0 }, active: true } })) > 0) {
+    fail("monetization", "Turn off or delete your paid tiers before removing the Stripe keys.");
+  }
+  await prisma.instanceSetting.updateMany({ where: { id: "instance" }, data: { stripeSecretKey: null, stripeWebhookSecret: null } });
+  done("monetization", "Stripe keys removed.");
+}
 
 function parsePrice(formData: FormData): number | null {
   const cents = Math.round(Number(text(formData, "price")) * 100);
@@ -152,7 +208,7 @@ function parsePrice(formData: FormData): number | null {
 
 export async function createTier(formData: FormData) {
   const user = await requireUser("CREATOR");
-  if (!user.acceptsPayments || paymentMode() === "off") {
+  if (!user.acceptsPayments || (await paymentMode()) === "off") {
     fail("/dashboard/tiers", "Turn on payments in Settings > Monetization to add paid tiers.");
   }
   const name = text(formData, "name");
@@ -183,6 +239,39 @@ export async function updateTier(formData: FormData) {
   if (description.length > MAX_TIER_DESCRIPTION) fail("/dashboard/tiers", `Descriptions are limited to ${MAX_TIER_DESCRIPTION} characters.`);
   await prisma.tier.update({ where: { id: tier.id }, data: { name, price, description: description || null } });
   done("/dashboard/tiers", "Tier updated.");
+}
+
+export async function setTierActive(formData: FormData) {
+  const user = await requireUser("CREATOR");
+  const tier = await prisma.tier.findFirst({ where: { id: text(formData, "tierId"), creatorId: user.id } });
+  if (!tier) fail("/dashboard/tiers", "That tier no longer exists.");
+  if (tier.price === 0) fail("/dashboard/tiers", "The free Follower tier can't be turned off.");
+  const active = formData.get("active") === "1";
+  if (active && (!user.acceptsPayments || (await paymentMode()) === "off")) {
+    fail("/dashboard/tiers", "Turn on payments in Settings > Monetization before turning a paid tier back on.");
+  }
+  await prisma.tier.update({ where: { id: tier.id }, data: { active } });
+  done("/dashboard/tiers", active ? "Tier turned on." : "Tier turned off. Current members keep access.");
+}
+
+export async function deleteTier(formData: FormData) {
+  const user = await requireUser("CREATOR");
+  const tier = await prisma.tier.findFirst({ where: { id: text(formData, "tierId"), creatorId: user.id } });
+  if (!tier) fail("/dashboard/tiers", "That tier no longer exists.");
+  if (tier.price === 0) fail("/dashboard/tiers", "The free Follower tier can't be deleted.");
+
+  const [members, posts] = await Promise.all([
+    prisma.subscription.count({ where: { tierId: tier.id, ...activeSubscriptionWhere() } }),
+    prisma.post.count({ where: { minTierId: tier.id } }),
+  ]);
+  if (members > 0) fail("/dashboard/tiers", "This tier still has members. Turn it off instead, or end their plans first.");
+  if (posts > 0) fail("/dashboard/tiers", "Posts are still limited to this tier. Change their visibility first, or turn the tier off instead.");
+
+  await prisma.tier.delete({ where: { id: tier.id } });
+  if (tier.stripePriceId && (await stripeConfigured())) {
+    await (await getStripe()).prices.update(tier.stripePriceId, { active: false }).catch(() => undefined);
+  }
+  done("/dashboard/tiers", "Tier deleted.");
 }
 
 export async function changePassword(formData: FormData) {

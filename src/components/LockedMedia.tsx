@@ -58,6 +58,6 @@ export default function LockedMedia({ item, canBlur, previewSeconds, hasThumbnai
     );
   }
 
-  const label = item.kind === "IMAGE" ? "Photo" : "Audio";
+  const label = item.kind === "IMAGE" ? "Photo" : item.kind === "FILE" ? "File" : "Audio";
   return <div className="rounded-theme bg-secondary p-6 text-center text-muted">{label} locked</div>;
 }

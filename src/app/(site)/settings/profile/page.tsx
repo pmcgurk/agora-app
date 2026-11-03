@@ -6,6 +6,7 @@ import { buttonClass, inputClass, linkClass } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
 import { creatorPath } from "@/lib/creator";
 import { profileImageUrl } from "@/lib/profile-images";
+import { readSocialLinks, SOCIAL_PLATFORMS } from "@/lib/social-links";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +18,7 @@ export default async function ProfileSettings({
   const user = await requireUser();
   const { notice, error } = await searchParams;
   const isCreator = user.role === "CREATOR";
+  const socialValues = Object.fromEntries(readSocialLinks(user.socialLinks).map(({ platform, url }) => [platform.key, url]));
 
   return (
     <section className="space-y-4">
@@ -76,6 +78,22 @@ export default async function ProfileSettings({
                 className={inputClass}
               />
             </label>
+            <fieldset className="space-y-2">
+              <legend className="font-medium">Social accounts</legend>
+              <p className="text-sm text-muted">Paste a link or just your username. Leave blank to hide.</p>
+              {SOCIAL_PLATFORMS.map((platform) => (
+                <label key={platform.key} className="block">
+                  {platform.label}
+                  <input
+                    name={`social-${platform.key}`}
+                    maxLength={300}
+                    defaultValue={socialValues[platform.key] ?? ""}
+                    placeholder={platform.profileUrl ? "username or link" : "https://…"}
+                    className={inputClass}
+                  />
+                </label>
+              ))}
+            </fieldset>
           </>
         )}
         <button className={buttonClass}>Save profile</button>

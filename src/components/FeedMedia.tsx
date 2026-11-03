@@ -2,10 +2,13 @@
 
 import { useEffect, useState } from "react";
 import LockedMedia from "@/components/LockedMedia";
+import FileCard from "@/components/FileCard";
 
 export type FeedItem = {
   id: string;
-  kind: "IMAGE" | "VIDEO" | "AUDIO";
+  kind: "IMAGE" | "VIDEO" | "AUDIO" | "FILE";
+  fileName?: string | null;
+  size?: number | null;
   canBlur: boolean;
   previewSeconds: number | null;
   hasThumbnail: boolean;
@@ -77,6 +80,8 @@ export default function FeedMedia({ items, unlocked }: { items: FeedItem[]; unlo
           </button>
         ) : item.kind === "VIDEO" ? (
           <video key={item.id} src={src} poster={`${src}?variant=thumb`} controls controlsList="nodownload" preload="none" className="aspect-video w-full bg-black" />
+        ) : item.kind === "FILE" ? (
+          <FileCard key={item.id} id={item.id} fileName={item.fileName ?? null} size={item.size ?? null} />
         ) : (
           <audio key={item.id} src={src} controls preload="none" className="w-full p-3" />
         )}

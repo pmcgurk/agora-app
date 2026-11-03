@@ -25,7 +25,10 @@ export async function subscribe(formData: FormData) {
     await activate(user.id, tier);
     redirect(`${base}?notice=${encodeURIComponent("You're now following.")}`);
   }
-  const mode = paymentMode();
+  const mode = await paymentMode();
+  if (!tier.active) {
+    redirect(`${base}/support?error=${encodeURIComponent("That tier is no longer available.")}`);
+  }
   if (mode === "off") {
     redirect(`${base}/support?error=${encodeURIComponent("Payments are not enabled yet.")}`);
   }
@@ -48,7 +51,7 @@ export async function subscribe(formData: FormData) {
 export async function completeTestCheckout(formData: FormData) {
   const user = await requireUser("PATRON");
   const tier = await prisma.tier.findUnique({ where: { id: String(formData.get("tierId") ?? "") } });
-  if (!tier || tier.price === 0 || paymentMode() !== "test") redirect("/");
+  if (!tier || tier.price === 0 || !tier.active || (await paymentMode()) !== "test") redirect("/");
   const creator = await prisma.user.findUniqueOrThrow({
     where: { id: tier.creatorId },
     select: { id: true, slug: true, currency: true },
@@ -86,7 +89,7 @@ export async function cancelSubscription(formData: FormData) {
 
 export async function openBillingPortal() {
   const user = await requireUser("PATRON");
-  if (paymentMode() !== "stripe") redirect("/settings/subscriptions");
+  if ((await paymentMode()) !== "stripe") redirect("/settings/subscriptions");
   let url: string;
   try {
     url = await createPortalUrl(user);

@@ -1,8 +1,16 @@
+import FileCard from "@/components/FileCard";
+
 // Media is always loaded through the authorizing /api/media route, never a stored URL.
-export type MediaViewItem = { id: string; kind: "IMAGE" | "VIDEO" | "AUDIO" };
+export type MediaViewItem = {
+  id: string;
+  kind: "IMAGE" | "VIDEO" | "AUDIO" | "FILE";
+  fileName?: string | null;
+  size?: number | null;
+};
 
 export default function MediaView({ item }: { item: MediaViewItem }) {
   const src = `/api/media/${item.id}`;
+  if (item.kind === "FILE") return <FileCard id={item.id} fileName={item.fileName ?? null} size={item.size ?? null} />;
   if (item.kind === "VIDEO") {
     return (
       <video

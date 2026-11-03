@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { Prisma } from "@/generated/prisma/client";
+import { getStripeConfig } from "@/lib/payments";
 import { prisma } from "@/lib/prisma";
 import { getStripe } from "@/lib/stripe";
 import { handleStripeEvent } from "@/lib/stripe-events";
@@ -7,15 +8,15 @@ import { handleStripeEvent } from "@/lib/stripe-events";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
-  const secret = process.env.STRIPE_WEBHOOK_SECRET;
+  const { secretKey, webhookSecret: secret } = await getStripeConfig();
   const signature = request.headers.get("stripe-signature");
-  if (!secret || !process.env.STRIPE_SECRET_KEY) return NextResponse.json({ error: "Stripe is not configured." }, { status: 503 });
+  if (!secret || !secretKey) return NextResponse.json({ error: "Stripe is not configured." }, { status: 503 });
   if (!signature) return NextResponse.json({ error: "Missing signature." }, { status: 400 });
 
   const body = await request.text();
   let event;
   try {
-    event = getStripe().webhooks.constructEvent(body, signature, secret);
+    event = (await getStripe()).webhooks.constructEvent(body, signature, secret);
   } catch {
     return NextResponse.json({ error: "Invalid signature." }, { status: 400 });
   }

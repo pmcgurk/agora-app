@@ -36,6 +36,7 @@ export default async function SupportPage({
   const currentTier =
     tiers.filter((tier) => subscriptions.some((subscription) => subscription.tierId === tier.id)).at(-1) ?? null;
   const currentPlan = subscriptions.find((subscription) => subscription.tierId === currentTier?.id) ?? null;
+  const visibleTiers = tiers.filter((tier) => tier.active || tier.id === currentTier?.id);
 
   return (
     <section className="space-y-6">
@@ -45,7 +46,7 @@ export default async function SupportPage({
       </div>
       <Flash error={error} />
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {tiers.map((tier) => (
+        {visibleTiers.map((tier) => (
           <div key={tier.id} className="agora-card agora-tier flex flex-col rounded-theme border border-line bg-surface p-5">
             <h3 className="text-lg font-semibold">{tier.name}</h3>
             <p className="mt-2 text-3xl font-bold text-primary">

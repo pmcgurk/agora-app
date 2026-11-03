@@ -27,7 +27,7 @@ async function syncSubscription(stripeSub: Stripe.Subscription): Promise<void> {
     const tier = await prisma.tier.findUnique({ where: { id: tierId }, select: { id: true, creatorId: true } });
     if (!tier || (await isBlocked(tier.creatorId, patronId))) {
       // Never leave a customer billed for access they cannot have.
-      await getStripe().subscriptions.cancel(stripeSub.id).catch((error) => console.error("Stripe cancel failed", error));
+      await (await getStripe()).subscriptions.cancel(stripeSub.id).catch((error) => console.error("Stripe cancel failed", error));
       return;
     }
     await activate(patronId, tier, { stripeSubscriptionId: stripeSub.id, expiresAt: accessEnd(stripeSub) });
@@ -54,7 +54,7 @@ async function syncSubscription(stripeSub: Stripe.Subscription): Promise<void> {
 async function recordInvoice(invoice: Stripe.Invoice): Promise<void> {
   const stripeSubId = idOf(invoice.parent?.subscription_details?.subscription);
   if (!stripeSubId || invoice.amount_paid <= 0) return;
-  const stripe = getStripe();
+  const stripe = await getStripe();
   const stripeSub = await stripe.subscriptions.retrieve(stripeSubId);
   await syncSubscription(stripeSub);
 
@@ -96,14 +96,14 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
       const session = event.data.object;
       const stripeSubId = idOf(session.subscription);
       if (session.mode !== "subscription" || !stripeSubId) return;
-      await syncSubscription(await getStripe().subscriptions.retrieve(stripeSubId));
+      await syncSubscription(await (await getStripe()).subscriptions.retrieve(stripeSubId));
       return;
     }
     case "invoice.paid":
       return recordInvoice(event.data.object);
     case "invoice.payment_failed": {
       const stripeSubId = idOf(event.data.object.parent?.subscription_details?.subscription);
-      if (stripeSubId) await syncSubscription(await getStripe().subscriptions.retrieve(stripeSubId));
+      if (stripeSubId) await syncSubscription(await (await getStripe()).subscriptions.retrieve(stripeSubId));
       return;
     }
     case "customer.subscription.updated":
