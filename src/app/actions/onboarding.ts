@@ -3,10 +3,10 @@
 import { redirect } from "next/navigation";
 import { createSession, requireUser } from "@/lib/auth";
 import { isSupportedCurrency } from "@/lib/currency";
+import { isInstanceOwner, setMultiCreator } from "@/lib/instance";
 import { hashPassword } from "@/lib/password";
 import { paymentMode } from "@/lib/payments";
 import { prisma } from "@/lib/prisma";
-import { FEDIVERSE_PATTERN, SLUG_PATTERN } from "@/lib/profile-fields";
 import { clientIp, withinLimit } from "@/lib/rate-limit";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -21,7 +21,7 @@ function failAt(path: string, message: string): never {
   redirect(`${path}?error=${encodeURIComponent(message)}`);
 }
 
-// Step 1 of a fresh install: creates the creator account. Only works while no creator exists.
+// Step 1 of a fresh install: creates the owner's creator account. Only works while no creator exists.
 export async function setupInstance(formData: FormData) {
   if (await prisma.user.findFirst({ where: { role: "CREATOR" }, select: { id: true } })) redirect("/login");
   if (!withinLimit(`setup:${await clientIp()}`, 10, 60 * 60 * 1000)) failAt("/setup", "Too many attempts. Try again later.");
@@ -46,6 +46,12 @@ export async function setupInstance(formData: FormData) {
       createdTiers: { create: { name: "Follower", price: 0 } },
     },
   });
+  // The first creator owns the instance: they decide whether it hosts several creators.
+  await prisma.instanceSetting.upsert({
+    where: { id: "instance" },
+    update: { ownerId: user.id },
+    create: { id: "instance", ownerId: user.id },
+  });
   await createSession(user.id);
   redirect("/onboarding");
 }
@@ -62,33 +68,27 @@ export async function skipOnboarding() {
   redirect("/dashboard");
 }
 
-// Step 2: public page details.
+// Step 2: public page details. Page names are set per creator (invites set them for new creators).
 export async function saveOnboardingProfile(formData: FormData) {
   const user = await requireOnboarding();
   const path = "/onboarding";
   const name = text(formData, "name");
-  const slug = text(formData, "slug").toLowerCase();
   const tagline = text(formData, "tagline");
   const bio = text(formData, "bio");
-  const fediverseHandle = text(formData, "fediverseHandle");
 
   if (!name || name.length > 100) failAt(path, "Enter a name up to 100 characters.");
-  if (slug) {
-    if (!SLUG_PATTERN.test(slug)) failAt(path, "The page name must be 3-30 characters: lowercase letters, numbers and hyphens.");
-    const taken = await prisma.user.findFirst({
-      where: { id: { not: user.id }, OR: [{ slug }, { id: slug }] },
-      select: { id: true },
-    });
-    if (taken) failAt(path, "That page name is already taken.");
-  }
   if (tagline.length > 120) failAt(path, "The tagline can be up to 120 characters.");
   if (bio.length > 2000) failAt(path, "The about text can be up to 2000 characters.");
-  if (fediverseHandle && !FEDIVERSE_PATTERN.test(fediverseHandle)) failAt(path, "Enter a fediverse handle like @name@example.social.");
 
   await prisma.user.update({
     where: { id: user.id },
-    data: { name, slug: slug || null, tagline: tagline || null, bio: bio || null, fediverseHandle: fediverseHandle || null },
+    data: { name, tagline: tagline || null, bio: bio || null },
   });
+
+  // Only the owner decides whether this instance hosts more than one creator.
+  if (await isInstanceOwner(user.id)) {
+    await setMultiCreator(formData.get("multiCreator") === "yes");
+  }
   redirect("/onboarding?step=payments");
 }
 

@@ -1,7 +1,10 @@
 import Link from "next/link";
 import { createTier, deleteTier, setTierActive, updateTier } from "@/app/actions/settings";
+import ConfirmAction from "@/components/ConfirmAction";
 import Flash from "@/components/Flash";
-import { buttonClass, inputClass, linkClass, secondaryButtonClass } from "@/components/ui";
+import TierEditor from "@/components/TierEditor";
+import { linkClass, secondaryButtonClass } from "@/components/ui";
+import { supportPath } from "@/lib/creator";
 import { requireUser } from "@/lib/auth";
 import { formatMoney } from "@/lib/currency";
 import { paymentMode } from "@/lib/payments";
@@ -18,11 +21,20 @@ export default async function TiersPage({
   const { error, notice } = await searchParams;
   const stats = await getCreatorStats(user.id);
   const money = (cents: number) => formatMoney(cents, user.currency);
+  const canAddPaid = user.acceptsPayments && (await paymentMode()) !== "off";
 
   return (
     <>
-      <h1 className="text-3xl font-bold text-primary">Tiers</h1>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-3xl font-bold text-primary">Tiers</h1>
+          <p className="text-sm text-muted">
+            Design each tier here, or <Link href={`${await supportPath(user)}?edit=1`} className={linkClass}>edit them on your support page</Link>.
+          </p>
+        </div>
+      </div>
       <Flash notice={notice} error={error} />
+
       <table className="w-full text-left text-sm">
         <thead>
           <tr className="text-muted">
@@ -46,82 +58,60 @@ export default async function TiersPage({
         </tbody>
       </table>
 
-      <section className="space-y-3">
+      <section className="space-y-6">
         <h2 className="text-xl font-semibold">Edit tiers</h2>
         {stats.tiers.map((tier) => {
-          const row = stats.perTier.find((entry) => entry.tier.id === tier.id);
+          const members = stats.perTier.find((entry) => entry.tier.id === tier.id)?.members ?? 0;
+          const paid = tier.price > 0;
           return (
-          <form key={tier.id} action={updateTier} className="agora-card flex flex-wrap items-end gap-3 rounded-theme border border-line bg-surface p-4">
-            <div className="flex w-full flex-wrap items-center gap-2 text-sm">
-              <span className="font-semibold text-text">{tier.name}</span>
-              <span className="rounded-full bg-secondary px-2 py-0.5 text-xs">
-                {tier.price === 0 ? "Free" : `${money(tier.price)}/mo`}
-              </span>
-              <span className="text-muted">
-                {row?.members ?? 0} {(row?.members ?? 0) === 1 ? "member" : "members"}
-              </span>
-              {tier.price > 0 && (
-                <span className={`ml-auto rounded-full px-2 py-0.5 text-xs ${tier.active ? "bg-success/10 text-success" : "bg-secondary text-muted"}`}>
-                  {tier.active ? "Accepting members" : "Closed to new members"}
-                </span>
+            <div key={tier.id} className="space-y-2">
+              <p className="text-sm text-muted">
+                {members} {members === 1 ? "member" : "members"}
+                {paid && (tier.active ? " · accepting new members" : " · closed to new members")}
+              </p>
+              <TierEditor
+                tier={{
+                  id: tier.id,
+                  name: tier.name,
+                  price: tier.price,
+                  description: tier.description,
+                  perks: tier.perks,
+                  badge: tier.badge,
+                  highlighted: tier.highlighted,
+                  active: tier.active,
+                }}
+                currency={user.currency}
+                action={updateTier}
+                extra={
+                  paid && (
+                    <>
+                      <button formAction={setTierActive} name="active" value={tier.active ? "0" : "1"} className={secondaryButtonClass}>
+                        {tier.active ? "Close to new members" : "Accept new members"}
+                      </button>
+                    </>
+                  )
+                }
+              />
+              {paid && (
+                <div className="text-right">
+                  <ConfirmAction
+                    action={deleteTier}
+                    fields={{ tierId: tier.id }}
+                    label="Delete this tier"
+                    message={`Delete ${tier.name}? This can't be undone.`}
+                    confirmLabel="Yes, delete"
+                  />
+                </div>
               )}
             </div>
-            <input type="hidden" name="tierId" value={tier.id} />
-            <label>
-              Name
-              <input name="name" required maxLength={60} defaultValue={tier.name} className={inputClass} />
-            </label>
-            {tier.price > 0 ? (
-              <label>
-                Price / month
-                <input name="price" type="number" min="1" max="1000" step="0.01" required defaultValue={(tier.price / 100).toFixed(2)} className={inputClass} />
-              </label>
-            ) : (
-              <span className="pb-2 text-muted">Free</span>
-            )}
-            <label className="w-full">
-              Description
-              <textarea name="description" rows={2} maxLength={400} defaultValue={tier.description ?? ""} className={inputClass} />
-            </label>
-            <div className="flex flex-wrap items-center gap-2">
-              <button className={buttonClass}>Save</button>
-              {tier.price > 0 && (
-                <>
-                  <button formAction={setTierActive} name="active" value={tier.active ? "0" : "1"} className={secondaryButtonClass}>
-                    {tier.active ? "Close to new members" : "Accept new members"}
-                  </button>
-                  <button
-                    formAction={deleteTier}
-                    className="rounded-theme px-3 py-2 text-sm font-medium text-danger underline-offset-2 hover:underline"
-                  >
-                    Delete
-                  </button>
-                </>
-              )}
-            </div>
-          </form>
           );
         })}
       </section>
 
-      {user.acceptsPayments && (await paymentMode()) !== "off" ? (
+      {canAddPaid ? (
         <section className="space-y-3">
           <h2 className="text-xl font-semibold">New tier</h2>
-          <form action={createTier} className="flex flex-wrap items-end gap-3">
-            <label>
-              Name
-              <input name="name" required maxLength={60} className={inputClass} />
-            </label>
-            <label>
-              Price / month ({user.currency})
-              <input name="price" type="number" min="1" max="1000" step="0.01" required className={inputClass} />
-            </label>
-            <label className="w-full">
-              Description
-              <textarea name="description" rows={2} maxLength={400} className={inputClass} />
-            </label>
-            <button className={buttonClass}>Add tier</button>
-          </form>
+          <TierEditor currency={user.currency} action={createTier} creating />
         </section>
       ) : (
         <p className="text-muted">

@@ -10,7 +10,7 @@ import { isSupportedCurrency } from "@/lib/currency";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { paymentMode, STRIPE_KEY_PATTERN, STRIPE_WEBHOOK_SECRET_PATTERN, stripeConfigured } from "@/lib/payments";
 import { prisma } from "@/lib/prisma";
-import { FEDIVERSE_PATTERN, SLUG_PATTERN } from "@/lib/profile-fields";
+import { SLUG_PATTERN } from "@/lib/profile-fields";
 import { setInstancePrivate } from "@/lib/instance";
 import { COLOR_PATTERN, parseThemeFile, RADIUS_PATTERN } from "@/themes";
 import { isFontKey } from "@/themes/fonts";
@@ -25,51 +25,53 @@ function text(formData: FormData, name: string): string {
 
 const pathOf = (section: string) => (section.startsWith("/") ? section : `/settings/${section}`);
 
+// Adds a query parameter, respecting any query already on the path (e.g. "?edit=1").
+const withQuery = (path: string, query: string) => `${path}${path.includes("?") ? "&" : "?"}${query}`;
+
 function fail(section: string, message: string): never {
-  redirect(`${pathOf(section)}?error=${encodeURIComponent(message)}`);
+  redirect(withQuery(pathOf(section), `error=${encodeURIComponent(message)}`));
 }
 
 function done(section: string, message = "Saved."): never {
-  redirect(`${pathOf(section)}?notice=${encodeURIComponent(message)}`);
+  redirect(withQuery(pathOf(section), `notice=${encodeURIComponent(message)}`));
 }
 
-export async function saveProfile(formData: FormData) {
+// Returned to the form rather than redirecting, so nothing the creator typed is lost on an error.
+export type ProfileFormState = { error?: string; notice?: string };
+
+export async function saveProfile(_previous: ProfileFormState, formData: FormData): Promise<ProfileFormState> {
   const user = await requireUser();
   const name = text(formData, "name");
-  if (!name || name.length > 100) fail("profile", "Enter a name up to 100 characters.");
+  if (!name || name.length > 100) return { error: "Enter a name up to 100 characters." };
 
   if (user.role !== "CREATOR") {
     await prisma.user.update({ where: { id: user.id }, data: { name } });
-    done("profile");
+    return { notice: "Profile saved." };
   }
 
   const slug = text(formData, "slug").toLowerCase();
   const tagline = text(formData, "tagline");
   const bio = text(formData, "bio");
-  const fediverseHandle = text(formData, "fediverseHandle");
 
   if (slug) {
     if (!SLUG_PATTERN.test(slug)) {
-      fail("profile", "The page name must be 3-30 characters: lowercase letters, numbers and hyphens.");
+      return { error: "The page name must be 3-30 characters: lowercase letters, numbers and hyphens." };
     }
     const taken = await prisma.user.findFirst({
       where: { id: { not: user.id }, OR: [{ slug }, { id: slug }] },
       select: { id: true },
     });
-    if (taken) fail("profile", "That page name is already taken.");
+    if (taken) return { error: "That page name is already taken." };
   }
-  if (tagline.length > 120) fail("profile", "The tagline can be up to 120 characters.");
-  if (bio.length > 2000) fail("profile", "The about text can be up to 2000 characters.");
-  if (fediverseHandle && !FEDIVERSE_PATTERN.test(fediverseHandle)) {
-    fail("profile", "Enter a fediverse handle like @name@example.social.");
-  }
+  if (tagline.length > 120) return { error: "The tagline can be up to 120 characters." };
+  if (bio.length > 2000) return { error: "The about text can be up to 2000 characters." };
 
   const socialLinks: Record<string, string> = {};
   for (const platform of SOCIAL_PLATFORMS) {
     const raw = text(formData, `social-${platform.key}`);
     if (!raw) continue;
     const url = normalizeSocialLink(platform, raw);
-    if (!url) fail("profile", `Enter a valid ${platform.label} link or username.`);
+    if (!url) return { error: `Enter a valid ${platform.label} link or username.` };
     socialLinks[platform.key] = url;
   }
 
@@ -80,11 +82,10 @@ export async function saveProfile(formData: FormData) {
       slug: slug || null,
       tagline: tagline || null,
       bio: bio || null,
-      fediverseHandle: fediverseHandle || null,
       socialLinks: Object.keys(socialLinks).length > 0 ? socialLinks : Prisma.DbNull,
     },
   });
-  done("profile");
+  return { notice: "Profile saved." };
 }
 
 export async function saveAppearance(formData: FormData) {
@@ -237,39 +238,72 @@ function parsePrice(formData: FormData): number | null {
   return Number.isFinite(cents) && cents >= 100 && cents <= 100_000 ? cents : null;
 }
 
+const MAX_PERKS = 12;
+const MAX_PERK_LENGTH = 120;
+const MAX_BADGE_LENGTH = 24;
+
+// Where a tier form sends the creator back to: the dashboard, or the support page they edited from.
+function returnPath(formData: FormData): string {
+  const value = text(formData, "returnTo");
+  const allowed = value === "/dashboard/tiers" || /^(\/support|\/creators\/[A-Za-z0-9_-]+\/support)(\?edit=1)?$/.test(value);
+  return allowed ? value : "/dashboard/tiers";
+}
+
+// Perks arrive as one "perk" field per row; blank rows are dropped.
+function presentationFields(formData: FormData, path: string) {
+  const perks = formData
+    .getAll("perk")
+    .map((value) => (typeof value === "string" ? value.trim() : ""))
+    .filter(Boolean);
+  if (perks.length > MAX_PERKS) fail(path, `Up to ${MAX_PERKS} perks per tier.`);
+  if (perks.some((perk) => perk.length > MAX_PERK_LENGTH)) fail(path, `Each perk can be up to ${MAX_PERK_LENGTH} characters.`);
+  const badge = text(formData, "badge");
+  if (badge.length > MAX_BADGE_LENGTH) fail(path, `Badges are limited to ${MAX_BADGE_LENGTH} characters.`);
+  return { perks, badge: badge || null, highlighted: formData.get("highlighted") === "on" };
+}
+
 export async function createTier(formData: FormData) {
   const user = await requireUser("CREATOR");
+  const path = returnPath(formData);
   if (!user.acceptsPayments || (await paymentMode()) === "off") {
-    fail("/dashboard/tiers", "Turn on payments in Settings > Monetization to add paid tiers.");
+    fail(path, "Turn on payments in Settings > Monetization to add paid tiers.");
   }
   const name = text(formData, "name");
   const price = parsePrice(formData);
-  if (!name || name.length > 60) fail("/dashboard/tiers", "Enter a tier name up to 60 characters.");
+  if (!name || name.length > 60) fail(path, "Enter a tier name up to 60 characters.");
   // Free access is the automatic "Follower" tier, so paid tiers start at 1.00.
-  if (price === null) fail("/dashboard/tiers", "Price must be between 1 and 1000 per month.");
+  if (price === null) fail(path, "Price must be between 1 and 1000 per month.");
   const description = text(formData, "description");
-  if (description.length > MAX_TIER_DESCRIPTION) fail("/dashboard/tiers", `Descriptions are limited to ${MAX_TIER_DESCRIPTION} characters.`);
-  await prisma.tier.create({ data: { creatorId: user.id, name, price, description: description || null } });
-  done("/dashboard/tiers", "Tier added.");
+  if (description.length > MAX_TIER_DESCRIPTION) fail(path, `Descriptions are limited to ${MAX_TIER_DESCRIPTION} characters.`);
+  const presentation = presentationFields(formData, path);
+  await prisma.tier.create({
+    data: { creatorId: user.id, name, price, description: description || null, ...presentation },
+  });
+  done(path, "Tier added.");
 }
 
 export async function updateTier(formData: FormData) {
   const user = await requireUser("CREATOR");
+  const path = returnPath(formData);
   const tier = await prisma.tier.findFirst({ where: { id: text(formData, "tierId"), creatorId: user.id } });
-  if (!tier) fail("/dashboard/tiers", "That tier no longer exists.");
+  if (!tier) fail(path, "That tier no longer exists.");
   const name = text(formData, "name");
-  if (!name || name.length > 60) fail("/dashboard/tiers", "Enter a tier name up to 60 characters.");
+  if (!name || name.length > 60) fail(path, "Enter a tier name up to 60 characters.");
 
   let price = tier.price;
   if (tier.price > 0) {
     const parsed = parsePrice(formData);
-    if (parsed === null) fail("/dashboard/tiers", "Price must be between 1 and 1000 per month.");
+    if (parsed === null) fail(path, "Price must be between 1 and 1000 per month.");
     price = parsed;
   }
   const description = text(formData, "description");
-  if (description.length > MAX_TIER_DESCRIPTION) fail("/dashboard/tiers", `Descriptions are limited to ${MAX_TIER_DESCRIPTION} characters.`);
-  await prisma.tier.update({ where: { id: tier.id }, data: { name, price, description: description || null } });
-  done("/dashboard/tiers", "Tier updated.");
+  if (description.length > MAX_TIER_DESCRIPTION) fail(path, `Descriptions are limited to ${MAX_TIER_DESCRIPTION} characters.`);
+  const presentation = presentationFields(formData, path);
+  await prisma.tier.update({
+    where: { id: tier.id },
+    data: { name, price, description: description || null, ...presentation },
+  });
+  done(path, "Tier updated.");
 }
 
 export async function setTierActive(formData: FormData) {

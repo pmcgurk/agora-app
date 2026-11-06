@@ -40,7 +40,6 @@ model User {
   name             String
   email            String           @unique
   passwordHash     String
-  fediverseHandle  String?
   role             Role
   themeName        String           @default("default")
   themeSettings    Json?
@@ -94,6 +93,7 @@ model User {
   subscriptions    Subscription[]   @relation("PatronSubscriptions")
   posts            Post[]           @relation("CreatorPosts")
   sessions         Session[]
+  invitesSent      CreatorInvite[] @relation("InvitesSent")
 }
 
 model Session {
@@ -116,6 +116,11 @@ model Tier {
   description     String?
   // Turned-off tiers stop accepting new members; existing members keep their access.
   active          Boolean        @default(true)
+  // Shown on the support page as a checklist, one line per perk.
+  perks           String[]       @default([])
+  // Optional label such as "Most popular", and whether the card is emphasised.
+  badge           String?
+  highlighted     Boolean        @default(false)
   mutes           TierMute[]
   payments        Payment[]
   dmGatedFor      User[]         @relation("DmTier")
@@ -178,6 +183,8 @@ model PostMedia {
   objectKey          String
   // Original file name, kept for generic FILE attachments (downloads).
   fileName           String?
+  // Images embedded in the post text. They are not shown in the attachment gallery.
+  inline             Boolean   @default(false)
   // Server-generated derivatives, safe to show to viewers who cannot see the original.
   blurObjectKey      String?
   previewObjectKey   String?
@@ -238,9 +245,22 @@ model ProfileViewDay {
 model InstanceSetting {
   id                  String  @id @default("instance")
   isPrivate           Boolean @default(false)
+  // Off: one creator, whose page is the home page. On: the owner can invite more creators.
+  multiCreator        Boolean @default(false)
+  // The creator who completed setup; they manage invites. Null on installs made before this existed.
+  ownerId             String?
   // Stripe credentials entered in Settings; they take precedence over the environment variables.
   stripeSecretKey     String?
   stripeWebhookSecret String?
+  // How new creators join a multi-creator site (see CreatorSignupMode).
+  creatorSignup       CreatorSignupMode @default(INVITE)
+  // Outgoing mail. Entered in Settings > Email; when unset, the MAIL_* environment variables are used.
+  smtpHost            String?
+  smtpPort            Int?
+  smtpSecure          Boolean @default(false)
+  smtpUser            String?
+  smtpPassword        String?
+  mailFrom            String?
 }
 
 model Notification {
@@ -366,4 +386,48 @@ model StripeEvent {
   id          String   @id
   type        String
   processedAt DateTime @default(now())
+}
+
+// A pending invitation for another creator. Only a hash of the token is stored.
+model CreatorInvite {
+  id          String    @id @default(cuid())
+  email       String
+  name        String
+  slug        String?
+  tokenHash   String    @unique
+  createdById String
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  createdBy   User      @relation("InvitesSent", fields: [createdById], references: [id], onDelete: Cascade)
+}
+
+enum CreatorSignupMode {
+  // The owner invites every creator.
+  INVITE
+  // Anyone can create a creator account from the sign-up page.
+  OPEN
+  // Anyone can apply; the owner approves or rejects each application.
+  APPROVAL
+}
+
+enum ApplicationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// A request from someone who wants a creator account on a site that asks for approval.
+model CreatorApplication {
+  id           String            @id @default(cuid())
+  name         String
+  email        String
+  passwordHash String
+  slug         String?
+  about        String?
+  status       ApplicationStatus @default(PENDING)
+  createdAt    DateTime          @default(now())
+  decidedAt    DateTime?
+
+  @@index([status, createdAt])
 }

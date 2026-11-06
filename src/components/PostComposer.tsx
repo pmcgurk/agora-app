@@ -3,6 +3,7 @@
 import { useActionState, useCallback, useEffect, useRef, useState } from "react";
 import { createPost, updatePost, type PostFormState } from "@/app/actions/creator";
 import { buttonClass, inputClass } from "@/components/ui";
+import MarkdownEditor from "@/components/MarkdownEditor";
 import { ACCEPT_ATTRIBUTE, describeUpload, formatBytes as formatSize, MAX_FILES_PER_POST, type MediaKindName } from "@/lib/media";
 
 type Tier = { id: string; name: string; price: number };
@@ -15,13 +16,15 @@ export type ExistingPost = {
   previewSeconds: number | null;
   allowBlurPreview: boolean;
   clearThumbnail: boolean;
-  media: { id: string; kind: MediaKindName; fileName?: string | null }[];
+  media: { id: string; kind: MediaKindName; fileName?: string | null; inline: boolean }[];
 };
 
 type Item = {
   id: string;
   file?: File;
   existingId?: string;
+  // Inline images live in the text, not the gallery; they are listed here so they can be removed.
+  inline: boolean;
   name: string;
   size: number | null;
   kind: MediaKindName;
@@ -73,6 +76,7 @@ export default function PostComposer({ tiers, post }: { tiers: Tier[]; post?: Ex
     (post?.media ?? []).map((media) => ({
       id: media.id,
       existingId: media.id,
+      inline: media.inline,
       name: media.fileName ?? `Attached ${media.kind.toLowerCase()}`,
       size: null,
       kind: media.kind,
@@ -120,20 +124,24 @@ export default function PostComposer({ tiers, post }: { tiers: Tier[]; post?: Ex
     return () => abortsInFlight.forEach((abort) => abort());
   }, []);
 
-  function addFiles(fileList: FileList | File[]) {
+  // inline: the files are images for the text; ids are the placeholders the editor already inserted.
+  function addFiles(fileList: FileList | File[], options?: { inline?: boolean; ids?: string[] }) {
     const accepted: Item[] = [];
-    for (const file of Array.from(fileList)) {
+    Array.from(fileList).forEach((file, index) => {
+      const kind = describeUpload(file.type).kind;
+      if (options?.inline && kind !== "IMAGE") return;
       accepted.push({
-        id: crypto.randomUUID(),
+        id: options?.ids?.[index] ?? crypto.randomUUID(),
         file,
+        inline: options?.inline ?? false,
         name: file.name,
         size: file.size,
-        kind: describeUpload(file.type).kind,
-        previewUrl: file.type.startsWith("image/") && describeUpload(file.type).kind === "IMAGE" ? URL.createObjectURL(file) : null,
+        kind,
+        previewUrl: kind === "IMAGE" ? URL.createObjectURL(file) : null,
         status: "queued",
         progress: 0,
       });
-    }
+    });
     const room = MAX_FILES_PER_POST - items.length;
     setNotice(accepted.length > room ? `Only ${MAX_FILES_PER_POST} files fit in one post.` : null);
     const added = accepted.slice(0, room);
@@ -172,7 +180,12 @@ export default function PostComposer({ tiers, post }: { tiers: Tier[]; post?: Ex
   const failed = items.some((item) => item.status === "error");
   const mediaList = items
     .filter((item) => item.status === "done")
-    .map((item) => (item.existingId ? { id: item.existingId } : { key: item.key, name: item.name }));
+    // ref links an inline image's placeholder in the text to its upload; the server swaps it for the media address.
+    .map((item) =>
+      item.existingId
+        ? { id: item.existingId, inline: item.inline }
+        : { key: item.key, name: item.name, ref: item.id, inline: item.inline },
+    );
 
   return (
     <form action={formAction} className="space-y-4">
@@ -181,13 +194,14 @@ export default function PostComposer({ tiers, post }: { tiers: Tier[]; post?: Ex
         Title
         <input name="title" required maxLength={150} defaultValue={post?.title} className={inputClass} />
       </label>
-      <label className="block">
-        Text <span className="text-sm text-muted">(Markdown supported: **bold**, *italic*, [links](https://…), lists, # headings)</span>
-        <textarea name="textContent" rows={4} defaultValue={post?.textContent ?? ""} className={inputClass} />
-      </label>
+      <MarkdownEditor
+        defaultValue={post?.textContent ?? ""}
+        images={items.map((item) => ({ id: item.id, previewUrl: item.previewUrl }))}
+        onImages={(files, ids) => addFiles(files, { inline: true, ids })}
+      />
 
       <div className="space-y-2">
-        <span className="block">Media</span>
+        <span className="block">Attachments <span className="text-sm text-muted">(shown as a gallery under the text)</span></span>
         <div
           onDragOver={(event) => {
             event.preventDefault();
@@ -233,7 +247,10 @@ export default function PostComposer({ tiers, post }: { tiers: Tier[]; post?: Ex
                   </span>
                 )}
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm">{item.name}</p>
+                  <p className="truncate text-sm">
+                    {item.name}
+                    {item.inline && <span className="ml-2 rounded-full bg-secondary px-2 py-0.5 text-xs">In the text</span>}
+                  </p>
                   <p className="text-xs text-muted">
                     {item.size !== null && `${formatSize(item.size)} · `}
                     {item.status === "done" && (item.existingId ? "Already in this post" : "Uploaded")}

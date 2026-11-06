@@ -1,9 +1,11 @@
 import type { ReactNode } from "react";
 import SettingsNav from "@/components/SettingsNav";
 import { requireUser } from "@/lib/auth";
+import { isInstanceOwner } from "@/lib/instance";
 
 export default async function SettingsLayout({ children }: { children: ReactNode }) {
   const user = await requireUser();
+  const owner = user.role === "CREATOR" && (await isInstanceOwner(user.id));
   const sections =
     user.role === "CREATOR"
       ? [
@@ -12,6 +14,12 @@ export default async function SettingsLayout({ children }: { children: ReactNode
           { href: "/settings/monetization", label: "Currency" },
           { href: "/settings/notifications", label: "Notifications" },
           { href: "/settings/privacy", label: "Privacy" },
+          ...(owner
+            ? [
+                { href: "/settings/creators", label: "Creators" },
+                { href: "/settings/email", label: "Email" },
+              ]
+            : []),
           { href: "/settings/api-keys", label: "API keys" },
           { href: "/settings/webhooks", label: "Webhooks" },
           { href: "/settings/api-docs", label: "API docs" },

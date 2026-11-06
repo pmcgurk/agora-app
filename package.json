@@ -4,12 +4,16 @@
   "private": true,
   "description": "Self-hosted, open-source alternative to Patreon and Ko-fi",
   "license": "MIT",
-  "repository": { "type": "git", "url": "git+https://github.com/pmcgurk/agora.git" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pmcgurk/agora.git"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && next build",
     "start": "next start",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "demo:seed": "tsx prisma/demo-seed.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.800.0",
@@ -18,6 +22,7 @@
     "@prisma/adapter-pg": "^7.10.1",
     "@prisma/client": "^7.10.1",
     "next": "^16.4.4",
+    "nodemailer": "^10.3.1",
     "pg": "^8.23.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
@@ -26,6 +31,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.15.0",
+    "@types/nodemailer": "^8.0.2",
     "@types/pg": "^8.23.1",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",

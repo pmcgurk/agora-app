@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
-import { saveProfile } from "@/app/actions/settings";
+import ProfileForm from "@/components/ProfileForm";
 import Avatar from "@/components/Avatar";
 import Flash from "@/components/Flash";
-import { buttonClass, inputClass, linkClass } from "@/components/ui";
+import { buttonClass, linkClass } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
 import { creatorPath } from "@/lib/creator";
 import { profileImageUrl } from "@/lib/profile-images";
@@ -41,63 +41,18 @@ export default async function ProfileSettings({
           />
         )}
       </div>
-      <form action={saveProfile} className="space-y-4">
-        <label className="block">
-          Display name
-          <input name="name" required maxLength={100} defaultValue={user.name} className={inputClass} />
-        </label>
-        {isCreator && (
-          <>
-            <label className="block">
-              Page name
-              <input
-                name="slug"
-                maxLength={30}
-                defaultValue={user.slug ?? ""}
-                placeholder="my-page"
-                className={inputClass}
-              />
-              <span className="block text-sm text-muted">
-                Your page lives at /creators/{user.slug ?? "<page name>"}. Lowercase letters, numbers and hyphens.
-              </span>
-            </label>
-            <label className="block">
-              Tagline
-              <input name="tagline" maxLength={120} defaultValue={user.tagline ?? ""} className={inputClass} />
-            </label>
-            <label className="block">
-              About
-              <textarea name="bio" rows={5} maxLength={2000} defaultValue={user.bio ?? ""} className={inputClass} />
-            </label>
-            <label className="block">
-              Fediverse handle
-              <input
-                name="fediverseHandle"
-                defaultValue={user.fediverseHandle ?? ""}
-                placeholder="@you@example.social"
-                className={inputClass}
-              />
-            </label>
-            <fieldset className="space-y-2">
-              <legend className="font-medium">Social accounts</legend>
-              <p className="text-sm text-muted">Paste a link or just your username. Leave blank to hide.</p>
-              {SOCIAL_PLATFORMS.map((platform) => (
-                <label key={platform.key} className="block">
-                  {platform.label}
-                  <input
-                    name={`social-${platform.key}`}
-                    maxLength={300}
-                    defaultValue={socialValues[platform.key] ?? ""}
-                    placeholder={platform.profileUrl ? "username or link" : "https://…"}
-                    className={inputClass}
-                  />
-                </label>
-              ))}
-            </fieldset>
-          </>
-        )}
-        <button className={buttonClass}>Save profile</button>
-      </form>
+      <ProfileForm
+        isCreator={isCreator}
+        initial={{
+          name: user.name,
+          slug: user.slug ?? "",
+          tagline: user.tagline ?? "",
+          bio: user.bio ?? "",
+          social: socialValues,
+        }}
+        platforms={SOCIAL_PLATFORMS.map((platform) => ({ key: platform.key, label: platform.label, usernameOnly: Boolean(platform.profileUrl) }))}
+        pagePath={`/creators/${user.slug ?? "<page name>"}`}
+      />
       {isCreator && (
         <p>
           <a href={creatorPath(user)} className={linkClass}>View your public page</a>

@@ -29,24 +29,55 @@ import { tipperLabel } from "@/lib/tips";
 import { emitEvent } from "@/lib/webhooks";
 import { prisma } from "@/lib/prisma";
 import { headObject } from "@/lib/s3";
+import { randomUUID } from "node:crypto";
 
 export type PostFormState = { error?: string };
 
-type MediaItem = { id: string } | { key: string; name: string | null };
+// id: an existing attachment. key: a new upload. ref: the placeholder the editor put in the text.
+type MediaItem =
+  | { id: string; inline: boolean }
+  | { key: string; name: string | null; ref: string | null; inline: boolean };
 
 function text(formData: FormData, name: string): string {
   const value = formData.get(name);
   return typeof value === "string" ? value.trim() : "";
 }
 
-type VerifiedUpload = { key: string; contentType: string; kind: MediaKindName; size: number; fileName: string | null };
+type VerifiedUpload = {
+  key: string;
+  contentType: string;
+  kind: MediaKindName;
+  size: number;
+  fileName: string | null;
+  ref: string | null;
+  inline: boolean;
+};
+
+// Inline images are referenced from the post text as ![alt](upload:<ref>); once the rows exist the
+// placeholder becomes the real media address. Returns null if a placeholder has no matching upload.
+const PLACEHOLDER = /\]\(upload:([A-Za-z0-9-]{8,64})\)/g;
+function linkInlineImages(textContent: string, ids: Map<string, string>): string | null {
+  let missing = false;
+  const linked = textContent.replace(PLACEHOLDER, (match, ref: string) => {
+    const id = ids.get(ref);
+    if (!id) {
+      missing = true;
+      return match;
+    }
+    return `](/api/media/${id})`;
+  });
+  return missing || linked.includes("](upload:") ? null : linked;
+}
 
 // Uploads go browser -> MinIO directly; before attaching, confirm each object exists, belongs
 // to this creator, is not already attached to a post and is within the limits.
-async function verifyUploads(creatorId: string, uploads: { key: string; name: string | null }[]): Promise<VerifiedUpload[] | string> {
+async function verifyUploads(
+  creatorId: string,
+  uploads: { key: string; name: string | null; ref: string | null; inline: boolean }[],
+): Promise<VerifiedUpload[] | string> {
   const keyPattern = new RegExp(`^${uploadKeyPrefix(creatorId)}[0-9a-f-]{36}\\.[a-z0-9]{2,4}$`);
   const verified: VerifiedUpload[] = [];
-  for (const { key, name } of uploads) {
+  for (const { key, name, ref, inline } of uploads) {
     if (!keyPattern.test(key)) return "Invalid upload.";
     if (await prisma.postMedia.findFirst({ where: { objectKey: key }, select: { id: true } })) {
       return "That file is already attached to a post.";
@@ -59,12 +90,18 @@ async function verifyUploads(creatorId: string, uploads: { key: string; name: st
       await deleteObjects([key]);
       return "A file exceeded the size limit.";
     }
+    if (inline && described.kind !== "IMAGE") {
+      await deleteObjects([key]);
+      return "Only images can go inside the text.";
+    }
     verified.push({
       key,
       contentType: described.contentType,
       kind: described.kind,
       size: head.size,
       fileName: described.kind === "FILE" ? (cleanFileName(name) ?? "file") : null,
+      ref,
+      inline,
     });
   }
   return verified;
@@ -83,11 +120,17 @@ function parseItems(raw: string): MediaItem[] | string {
   const items: MediaItem[] = [];
   const seen = new Set<string>();
   for (const entry of parsed) {
-    const value = entry as { id?: unknown; key?: unknown; name?: unknown };
+    const value = entry as { id?: unknown; key?: unknown; name?: unknown; ref?: unknown; inline?: unknown };
     const identifier = typeof value?.id === "string" ? value.id : typeof value?.key === "string" ? value.key : null;
     if (!identifier || seen.has(identifier)) return "Invalid media list.";
     seen.add(identifier);
-    items.push(typeof value.id === "string" ? { id: value.id } : { key: value.key as string, name: cleanFileName(value.name) });
+    const inline = value.inline === true;
+    if (typeof value.id === "string") {
+      items.push({ id: value.id, inline });
+      continue;
+    }
+    const ref = typeof value.ref === "string" && /^[A-Za-z0-9-]{8,64}$/.test(value.ref) ? value.ref : null;
+    items.push({ key: value.key as string, name: cleanFileName(value.name), ref, inline });
   }
   return items;
 }
@@ -137,9 +180,15 @@ export async function createPost(_previous: PostFormState, formData: FormData): 
 
   const uploads = await verifyUploads(
     user.id,
-    form.items.map((item) => ("key" in item ? item : { key: "", name: null })),
+    form.items.flatMap((item) => ("key" in item ? [item] : [])),
   );
   if (typeof uploads === "string") return { error: uploads };
+
+  // Each upload gets its row id now, so the text can point at inline images before anything is written.
+  const planned = uploads.map((upload) => ({ upload, id: randomUUID() }));
+  const ids = new Map(planned.flatMap(({ upload, id }) => (upload.ref ? [[upload.ref, id] as const] : [])));
+  const textContent = linkInlineImages(form.textContent, ids);
+  if (textContent === null) return { error: "An image in the text is missing. Remove it from the text or add it again." };
 
   const teasers: TeaserSettings = {
     allowBlurPreview: form.allowBlurPreview,
@@ -150,7 +199,7 @@ export async function createPost(_previous: PostFormState, formData: FormData): 
   let postId: string;
   try {
     const media = [];
-    for (const [position, upload] of uploads.entries()) {
+    for (const [position, { upload, id }] of planned.entries()) {
       const { kind } = upload;
       const result = await syncDerivatives(
         user.id,
@@ -159,7 +208,9 @@ export async function createPost(_previous: PostFormState, formData: FormData): 
       );
       created.push(...result.created);
       media.push({
+        id,
         position,
+        inline: upload.inline,
         kind,
         contentType: upload.contentType,
         fileName: upload.fileName,
@@ -173,7 +224,7 @@ export async function createPost(_previous: PostFormState, formData: FormData): 
       data: {
         creatorId: user.id,
         title: form.title,
-        textContent: form.textContent,
+        textContent,
         isPublic: form.isPublic,
         minTierId: form.minTierId,
         allowBlurPreview: form.allowBlurPreview,
@@ -216,6 +267,11 @@ export async function updatePost(_previous: PostFormState, formData: FormData): 
   );
   if (typeof uploads === "string") return { error: uploads };
   const uploadByKey = new Map(uploads.map((upload) => [upload.key, upload]));
+  // Row ids for the new uploads, fixed up front so the text can link to them.
+  const idByKey = new Map(uploads.map((upload) => [upload.key, randomUUID()]));
+  const ids = new Map(uploads.flatMap((upload) => (upload.ref ? [[upload.ref, idByKey.get(upload.key)!] as const] : [])));
+  const textContent = linkInlineImages(form.textContent, ids);
+  if (textContent === null) return { error: "An image in the text is missing. Remove it from the text or add it again." };
 
   const teasers: TeaserSettings = {
     allowBlurPreview: form.allowBlurPreview,
@@ -233,15 +289,17 @@ export async function updatePost(_previous: PostFormState, formData: FormData): 
         const result = await syncDerivatives(user.id, current, teasers);
         created.push(...result.created);
         obsolete.push(...result.obsolete);
-        updates.push(prisma.postMedia.update({ where: { id: item.id }, data: { position, ...result.next } }));
+        updates.push(prisma.postMedia.update({ where: { id: item.id }, data: { position, inline: item.inline, ...result.next } }));
       } else {
         const upload = uploadByKey.get(item.key)!;
         const { kind } = upload;
         const result = await syncDerivatives(user.id, { kind, objectKey: upload.key, ...NO_DERIVATIVES }, teasers);
         created.push(...result.created);
         additions.push({
+          id: idByKey.get(upload.key)!,
           postId: post.id,
           position,
+          inline: upload.inline,
           kind,
           contentType: upload.contentType,
           fileName: upload.fileName,
@@ -257,7 +315,7 @@ export async function updatePost(_previous: PostFormState, formData: FormData): 
         where: { id: post.id },
         data: {
           title: form.title,
-          textContent: form.textContent,
+          textContent,
           isPublic: form.isPublic,
           minTierId: form.minTierId,
           allowBlurPreview: form.allowBlurPreview,

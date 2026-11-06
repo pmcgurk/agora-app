@@ -71,6 +71,67 @@ the paid period; refunds issued from the Members page are real Stripe refunds. C
 data never touches Agora. The Stripe integration has been exercised against a mock
 Stripe API, not a live account, so test it in Stripe test mode before going live.
 
+## Email
+
+Agora sends email for creator invitations, creator applications and their decisions. Set it up
+in **Settings → Email** (owner only). Enter any SMTP server, press *Test connection and save*, and
+send yourself a test. Settings saved there take precedence over environment variables, so changing
+them needs no redeploy.
+
+To configure by environment instead, set:
+
+```sh
+MAIL_HOST=smtp.example.com
+MAIL_PORT=587
+MAIL_SECURE=false        # true for port 465
+MAIL_USER=you@example.com
+MAIL_PASSWORD=...
+MAIL_FROM=hello@example.com
+```
+
+Without any mail settings, Agora still works: invites show their link on screen for the owner to
+copy. Passwords for the mail server are stored in the database, like the Stripe key.
+
+## Creators on a shared site
+
+A site can host one creator (the default: the site is that creator's page, with the support page at
+`/support`) or several. Turn several creators on in **Settings → Creators** and choose how people join:
+
+- **Invite only**: the owner sends an invitation link (emailed when email is set up).
+- **Open sign-up**: anyone can create a creator account and pick their own page name.
+- **Applications**: anyone can apply; the owner approves or rejects each application.
+
+Each creator has their own page at `/creators/<page name>`.
+
+## Screenshots
+
+Sample data for screenshots and trying Agora out (a ceramics creator with three tiers, posts with
+inline images, two patrons and a few weeks of views):
+
+```sh
+npm run demo:seed   # point DATABASE_URL at an empty database first; refuses otherwise
+```
+
+Every demo account uses the password `demo-password`.
+
+**The creator's page, as a visitor sees it**
+
+![Creator page](docs/screenshots/creator-page.png)
+
+**Tiers on the support page** (perks, a highlighted tier and a badge)
+
+![Support page with tiers](docs/screenshots/support-tiers.png)
+
+**A patron's feed**, with their membership and the posts they can read
+
+![Patron feed](docs/screenshots/patron-feed.png)
+
+**The creator dashboard, the tier editor and the writing editor**
+
+![Creator dashboard](docs/screenshots/creator-dashboard.png)
+![Tier editor](docs/screenshots/tiers-editor.png)
+![Post editor](docs/screenshots/post-editor.png)
+
 ## What works today
 
 - Email and password accounts (creator or patron) with server-side sessions.
@@ -113,8 +174,13 @@ Stripe API, not a live account, so test it in Stripe test mode before going live
   comments, likes, members, refunds, blocks, messages). Docs are in Settings -> API docs.
 - On a single-creator instance the feed is the home page (`/`).
 - Likes (from the feed too, and on comments) and comments on posts, visible to people who can see the post.
-- One creator per instance for now: the site is themed with the creator's theme, their
-  name replaces "Agora" in the header, and visitors land on their page.
+- One creator or many. A single-creator site is themed with the creator's theme, their name
+  replaces "Agora" in the header, and visitors land on their page. The owner can turn on
+  several creators in Settings → Creators, invite them by link and set each creator's page name.
+- Tiers can carry perks (a checklist), a badge such as "Most popular" and a highlight. Creators edit
+  them on the Tiers page or directly on their support page.
+- Posts are written in a Markdown editor with a toolbar, shortcuts and a live preview. Images can be
+  dropped or pasted straight into the text.
 - Creator dashboard with Overview, Posts, Members, Tiers and Analytics sections, and a
   "New post" button in the header. Settings cover profile, appearance, currency, privacy
   and account; patrons get their own subscriptions and account settings.
@@ -170,7 +236,6 @@ promised; items move up when someone needs them. Contributions welcome (see
 
 ### Creator tools
 
-- [ ] Confirmation before deleting a tier (currently a single click).
 - [ ] Scheduled posts and draft previews shared by link.
 - [ ] Bulk actions on the Members page (message, gift or remove several members).
 - [ ] Creator-to-member broadcast messages.
@@ -215,8 +280,7 @@ promised; items move up when someone needs them. Contributions welcome (see
 
 ### Community
 
-- [ ] Federation (ActivityPub) so creators can be followed from other fediverse servers. The profile
-      already has a fediverse handle field; the protocol work is not started.
+- [ ] Federation (ActivityPub) so creators can be followed from other fediverse servers. Not started.
 - [ ] Translations and locale-aware currency and date formatting.
 
 Security reports: see [SECURITY.md](./SECURITY.md).

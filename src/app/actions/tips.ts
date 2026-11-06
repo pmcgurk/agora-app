@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { isBlocked } from "@/lib/blocks";
-import { creatorPath } from "@/lib/creator";
+import { creatorPath, supportPath } from "@/lib/creator";
 import { formatMoney } from "@/lib/currency";
 import { requireInstanceAccess } from "@/lib/instance";
 import { paymentMode } from "@/lib/payments";
@@ -29,7 +29,8 @@ export async function sendTip(formData: FormData) {
 
   // Only the places that show the tip form are valid places to come back to.
   const requested = String(formData.get("returnTo") ?? "");
-  const returnPath = requested === "/" || requested === base ? requested : `${base}/support`;
+  const supportBase = await supportPath(creator);
+  const returnPath = requested === "/" || requested === base || requested === supportBase ? requested : supportBase;
 
   const viewer = await getCurrentUser();
   const mode = await paymentMode();

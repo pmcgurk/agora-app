@@ -12,7 +12,7 @@ import { activeSubscriptionWhere, canView, getAccessContext } from "@/lib/access
 import { patronCanMessage } from "@/lib/dm";
 import { getCurrentUser } from "@/lib/auth";
 import { getSiteCreator } from "@/lib/instance";
-import { creatorPath, getCreator } from "@/lib/creator";
+import { creatorPath, getCreator, supportPath } from "@/lib/creator";
 import { prisma } from "@/lib/prisma";
 import { recordProfileView } from "@/lib/views";
 
@@ -39,10 +39,11 @@ export default async function CreatorFeed({
       include: {
         minTier: { select: { name: true, price: true } },
         media: {
+          where: { inline: false },
           orderBy: { position: "asc" },
           select: { id: true, kind: true, fileName: true, size: true, blurObjectKey: true, previewObjectKey: true, thumbBlurObjectKey: true },
         },
-        _count: { select: { likes: true, comments: true, media: true } },
+        _count: { select: { likes: true, comments: true, media: { where: { inline: false } } } },
       },
     }),
     viewer
@@ -61,6 +62,7 @@ export default async function CreatorFeed({
     tiers.filter((tier) => subscriptions.some((subscription) => subscription.tierId === tier.id)).at(-1) ?? null;
   const memberPlan = subscriptions.find((subscription) => subscription.tierId === memberTier?.id) ?? null;
   const base = creatorPath(creator);
+  const supportHref = await supportPath(creator);
   const dmGate =
     viewer !== null && viewer.id !== creator.id && viewer.role === "PATRON" && !access.blocked
       ? await patronCanMessage(creator, viewer.id)
@@ -90,7 +92,7 @@ export default async function CreatorFeed({
           {dmLocked && <span className="text-sm text-muted">{dmLocked}</span>}
           {canMessage && <Link href={`/messages/${creator.id}`} className={linkClass}>Message</Link>}
           {viewer?.id !== creator.id && (
-            <Link href={`${base}/support`} className={memberTier ? linkClass : buttonClass}>
+            <Link href={supportHref} className={memberTier ? linkClass : buttonClass}>
               {memberTier ? "Change plan" : "See tiers"}
             </Link>
           )}
@@ -141,7 +143,7 @@ export default async function CreatorFeed({
                 </Link>
                 <ShareButton path={`${base}/posts/${post.id}`} title={post.title} />
                 <Link href={`${base}/posts/${post.id}`} className={`${linkClass} ml-auto`}>
-                  {unlocked ? "Open" : "View teaser"}
+                  {unlocked ? "View full post" : "View teaser"}
                 </Link>
               </div>
             </article>

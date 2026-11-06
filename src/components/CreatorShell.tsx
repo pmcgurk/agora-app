@@ -8,7 +8,7 @@ import ThemeCss from "@/components/ThemeCss";
 import { tipsAvailable } from "@/components/TipJar";
 import { linkClass } from "@/components/ui";
 import { getCurrentUser } from "@/lib/auth";
-import { creatorPath, type getCreator } from "@/lib/creator";
+import { supportPath, type getCreator } from "@/lib/creator";
 import { profileImageUrl } from "@/lib/profile-images";
 import { readSocialLinks } from "@/lib/social-links";
 import { loadProfileLayout, themeStyle } from "@/themes";
@@ -50,7 +50,6 @@ export default async function CreatorShell({
                 <Link href={homeHref}>{creator.name}</Link>
               </h1>
               {creator.tagline && <p className="mt-1 text-lg">{creator.tagline}</p>}
-              {creator.fediverseHandle && <p className="text-muted">{creator.fediverseHandle}</p>}
             </div>
           </div>
           {socialLinks.length > 0 && (
@@ -66,7 +65,7 @@ export default async function CreatorShell({
           )}
           <nav aria-label="Creator pages" className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
             <Link href={homeHref} className={linkClass}>Posts</Link>
-            <Link href={`${creatorPath(creator)}/support`} className={linkClass}>Support</Link>
+            <Link href={await supportPath(creator)} className={linkClass}>Support</Link>
             {showTip && (
               <Link href={`${homeHref}#tip`} className="agora-tip-link ml-auto rounded-full border border-line px-3 text-sm leading-6 hover:border-primary hover:text-primary">
                 <span aria-hidden="true">♥</span> Tip

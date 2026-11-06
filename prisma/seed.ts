@@ -22,7 +22,6 @@ async function main() {
       tagline: "A demo creator page",
       email: "demo@agora.local",
       passwordHash,
-      fediverseHandle: "@demo@agora.local",
       role: "CREATOR",
       onboardedAt: new Date(),
       acceptsPayments: true,

@@ -6,6 +6,7 @@ import WizardSteps from "@/components/WizardSteps";
 import { buttonClass, cardClass, inputClass, secondaryButtonClass } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
 import { CURRENCIES } from "@/lib/currency";
+import { isInstanceOwner } from "@/lib/instance";
 import { paymentMode } from "@/lib/payments";
 import { WIZARD_STEPS } from "@/lib/profile-fields";
 
@@ -27,7 +28,11 @@ export default async function OnboardingPage({
       <WizardSteps steps={WIZARD_STEPS} current={payments ? 2 : 1} />
       <section className={`${cardClass} space-y-4`}>
         <Flash error={error} />
-        {payments ? <PaymentsStep currency={user.currency} /> : <ProfileStep user={user} />}
+        {payments ? (
+          <PaymentsStep currency={user.currency} />
+        ) : (
+          <ProfileStep user={user} owner={await isInstanceOwner(user.id)} />
+        )}
         <form action={skipOnboarding}>
           <button className="text-sm text-muted underline">Skip setup for now</button>
         </form>
@@ -36,34 +41,45 @@ export default async function OnboardingPage({
   );
 }
 
-function ProfileStep({ user }: { user: { name: string; slug: string | null; tagline: string | null; bio: string | null; fediverseHandle: string | null } }) {
+function ProfileStep({
+  user,
+  owner,
+}: {
+  user: { name: string; tagline: string | null; bio: string | null };
+  owner: boolean;
+}) {
   return (
     <>
       <header>
         <h2 className="text-2xl font-bold text-primary">Set up your page</h2>
         <p className="text-muted">This is what your visitors see. You can change it any time in Settings.</p>
       </header>
-      <form action={saveOnboardingProfile} className="space-y-3">
-        <label className="block">
+      <form action={saveOnboardingProfile} className="space-y-4">
+        <label className="block space-y-1 text-sm font-medium">
           Name
           <input name="name" required maxLength={100} defaultValue={user.name} className={inputClass} />
         </label>
-        <label className="block">
-          Page name (your address: /creators/<em>page-name</em>)
-          <input name="slug" maxLength={30} pattern="[a-z0-9][a-z0-9\-]{1,28}[a-z0-9]" defaultValue={user.slug ?? ""} className={inputClass} />
-        </label>
-        <label className="block">
+        <label className="block space-y-1 text-sm font-medium">
           Tagline
-          <input name="tagline" maxLength={120} defaultValue={user.tagline ?? ""} className={inputClass} />
+          <input name="tagline" maxLength={120} placeholder="A line about what you make" defaultValue={user.tagline ?? ""} className={inputClass} />
         </label>
-        <label className="block">
+        <label className="block space-y-1 text-sm font-medium">
           About
           <textarea name="bio" rows={4} maxLength={2000} defaultValue={user.bio ?? ""} className={inputClass} />
         </label>
-        <label className="block">
-          Fediverse handle (optional)
-          <input name="fediverseHandle" placeholder="@name@example.social" defaultValue={user.fediverseHandle ?? ""} className={inputClass} />
-        </label>
+        {owner && (
+          <label className="block space-y-1 text-sm font-medium">
+            Will this site host more than one creator?
+            <select name="multiCreator" defaultValue="no" className={inputClass}>
+              <option value="no">No, it is just my page</option>
+              <option value="yes">Yes, I will invite other creators</option>
+            </select>
+            <span className="block text-xs font-normal text-muted">
+              With several creators, each gets their own page at /creators/page-name. You can invite them from
+              Settings &rarr; Creators.
+            </span>
+          </label>
+        )}
         <button className={buttonClass}>Continue</button>
       </form>
     </>

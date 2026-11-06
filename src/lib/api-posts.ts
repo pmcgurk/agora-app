@@ -31,5 +31,5 @@ export function serializePost(post: ApiPost, creator: { id: string; slug: string
 
 export const postInclude = {
   minTier: { select: { id: true, name: true } },
-  _count: { select: { likes: true, comments: true, media: true } },
+  _count: { select: { likes: true, comments: true, media: { where: { inline: false } } } },
 } as const;

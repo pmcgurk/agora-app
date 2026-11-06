@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { completeTestCheckout } from "@/app/actions/patron";
 import { buttonClass, cardClass, linkClass } from "@/components/ui";
 import { getCurrentUser } from "@/lib/auth";
-import { creatorPath, getCreator } from "@/lib/creator";
+import { creatorPath, getCreator, supportPath } from "@/lib/creator";
 import { formatPrice } from "@/lib/currency";
 import { testCheckoutEnabled } from "@/lib/payments";
 import { prisma } from "@/lib/prisma";
@@ -35,7 +35,7 @@ export default async function CheckoutPage({ params }: { params: Promise<{ id: s
       <form action={completeTestCheckout} className="flex items-center gap-4">
         <input type="hidden" name="tierId" value={tier.id} />
         <button className={buttonClass}>Complete test payment</button>
-        <Link href={`${creatorPath(creator)}/support`} className={linkClass}>Cancel</Link>
+        <Link href={await supportPath(creator)} className={linkClass}>Cancel</Link>
       </form>
     </section>
   );

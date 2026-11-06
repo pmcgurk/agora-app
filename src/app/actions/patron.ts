@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { isBlocked } from "@/lib/blocks";
-import { creatorPath } from "@/lib/creator";
+import { creatorPath, supportPath } from "@/lib/creator";
 import { paymentMode } from "@/lib/payments";
 import { prisma } from "@/lib/prisma";
 import { activate, endPlan, hasActivePaidPlan } from "@/lib/subscriptions";
@@ -15,8 +15,9 @@ export async function subscribe(formData: FormData) {
   if (!tier) redirect("/");
   const creator = await prisma.user.findUniqueOrThrow({ where: { id: tier.creatorId }, select: { id: true, slug: true } });
   const base = creatorPath(creator);
+  const supportBase = await supportPath(creator);
   if (await isBlocked(creator.id, user.id)) {
-    redirect(`${base}/support?error=${encodeURIComponent("You can't follow or subscribe to this creator.")}`);
+    redirect(`${supportBase}?error=${encodeURIComponent("You can't follow or subscribe to this creator.")}`);
   }
 
   // Following (the free tier) never needs payment.
@@ -27,10 +28,10 @@ export async function subscribe(formData: FormData) {
   }
   const mode = await paymentMode();
   if (!tier.active) {
-    redirect(`${base}/support?error=${encodeURIComponent("That tier is no longer available.")}`);
+    redirect(`${supportBase}?error=${encodeURIComponent("That tier is no longer available.")}`);
   }
   if (mode === "off") {
-    redirect(`${base}/support?error=${encodeURIComponent("Payments are not enabled yet.")}`);
+    redirect(`${supportBase}?error=${encodeURIComponent("Payments are not enabled yet.")}`);
   }
   if (mode === "test") redirect(`${base}/checkout/${tier.id}`);
 
@@ -43,7 +44,7 @@ export async function subscribe(formData: FormData) {
     url = await createCheckoutUrl(user, tier, creatorFull);
   } catch (error) {
     console.error("Could not start Stripe checkout", error);
-    redirect(`${base}/support?error=${encodeURIComponent("Could not start checkout. Try again in a moment.")}`);
+    redirect(`${supportBase}?error=${encodeURIComponent("Could not start checkout. Try again in a moment.")}`);
   }
   redirect(url);
 }
@@ -56,7 +57,7 @@ export async function completeTestCheckout(formData: FormData) {
     where: { id: tier.creatorId },
     select: { id: true, slug: true, currency: true },
   });
-  if (await isBlocked(creator.id, user.id)) redirect(`${creatorPath(creator)}/support`);
+  if (await isBlocked(creator.id, user.id)) redirect(await supportPath(creator));
 
   await activate(user.id, tier);
   await prisma.payment.create({

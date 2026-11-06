@@ -11,7 +11,7 @@ export default async function EditPostPage({ params }: { params: Promise<{ id: s
   const [post, tiers] = await Promise.all([
     prisma.post.findFirst({
       where: { id, creatorId: user.id },
-      include: { media: { orderBy: { position: "asc" }, select: { id: true, kind: true, fileName: true } } },
+      include: { media: { orderBy: { position: "asc" }, select: { id: true, kind: true, fileName: true, inline: true } } },
     }),
     prisma.tier.findMany({ where: { creatorId: user.id }, orderBy: { price: "asc" }, select: { id: true, name: true, price: true } }),
   ]);

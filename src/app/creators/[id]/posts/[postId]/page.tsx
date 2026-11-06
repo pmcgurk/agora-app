@@ -29,6 +29,7 @@ export default async function PostPage({ params }: { params: Promise<{ id: strin
     include: {
       minTier: { select: { name: true, price: true } },
       media: {
+        where: { inline: false },
         orderBy: { position: "asc" },
         select: { id: true, kind: true, fileName: true, size: true, blurObjectKey: true, previewObjectKey: true, thumbBlurObjectKey: true },
       },

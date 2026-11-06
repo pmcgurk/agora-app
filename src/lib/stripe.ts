@@ -1,5 +1,5 @@
 import Stripe from "stripe";
-import { creatorPath } from "@/lib/creator";
+import { creatorPath, supportPath } from "@/lib/creator";
 import { getStripeConfig } from "@/lib/payments";
 import { prisma } from "@/lib/prisma";
 import { absoluteUrl } from "@/lib/webhooks";
@@ -82,7 +82,7 @@ export async function createCheckoutUrl(
     metadata,
     subscription_data: { metadata },
     success_url: absoluteUrl(`${base}?notice=${encodeURIComponent(`Welcome to ${tier.name}!`)}`),
-    cancel_url: absoluteUrl(`${base}/support`),
+    cancel_url: absoluteUrl(await supportPath(creator)),
   });
   if (!session.url) throw new Error("Stripe did not return a checkout URL.");
   return session.url;

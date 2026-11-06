@@ -21,7 +21,7 @@ export default async function PostsPage({
     prisma.post.findMany({
       where: { creatorId: user.id },
       orderBy: { createdAt: "desc" },
-      include: { minTier: true, _count: { select: { media: true, likes: true, comments: true } } },
+      include: { minTier: true, _count: { select: { media: { where: { inline: false } }, likes: true, comments: true } } },
     }),
     getViewAnalytics(user.id),
   ]);
