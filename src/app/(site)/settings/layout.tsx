@@ -16,7 +16,6 @@ export default async function SettingsLayout({ children }: { children: ReactNode
           { href: "/settings/privacy", label: "Privacy" },
           ...(owner
             ? [
-                { href: "/settings/creators", label: "Creators" },
                 { href: "/settings/email", label: "Email" },
               ]
             : []),

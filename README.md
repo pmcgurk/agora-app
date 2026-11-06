@@ -71,9 +71,40 @@ the paid period; refunds issued from the Members page are real Stripe refunds. C
 data never touches Agora. The Stripe integration has been exercised against a mock
 Stripe API, not a live account, so test it in Stripe test mode before going live.
 
+### Testing locally
+
+`stripe trigger payment_intent.succeeded` does not test Agora: it creates a payment that is not
+linked to any creator or tier, and the current CLI fixture is rejected by newer accounts. Test with a
+real Checkout instead:
+
+1. Run `stripe listen --forward-to localhost:3000/api/stripe/webhook` and use the `whsec_...` it
+   prints as `STRIPE_WEBHOOK_SECRET` (it changes each time you start `stripe listen`).
+2. Use a test key (`sk_test_...`). A restricted key needs write access to Customers, Products,
+   Prices and Checkout Sessions.
+3. Turn on payments in Settings → Monetization, make a paid tier, then subscribe or tip from a
+   second account with card `4242 4242 4242 4242` (any future expiry and CVC). Card
+   `4000 0000 0000 0341` attaches fine and then fails on renewal.
+
+### Managed Payments and tax codes
+
+Newer Stripe accounts have [Managed Payments](https://docs.stripe.com/payments/managed-payments)
+(Stripe acts as the seller of record and handles sales tax) on by default, and it requires a
+product tax code on everything sold. Agora sets `txcd_10000000` ("General - Electronically Supplied
+Services") on the Products it creates for tiers and tips, so Checkout works whether Managed Payments
+is on or off. Prices and tips are set as tax-inclusive, so a £10 tip is charged as £10 and any
+tax Stripe applies comes out of that amount (the creator receives less) instead of being added on top.
+Without this, Managed Payments adds tax to the checkout total (for example £12 for a £10 tip with 20%
+VAT). Tier prices created by an earlier version without a code are replaced automatically the
+next time someone subscribes. Managed Payments changes who is the merchant of record, and so fees,
+payouts and which countries you can sell to; read Stripe's eligibility page before enabling it on a
+live account, or switch it off under Settings → Managed Payments in the Stripe dashboard. If your
+content is not "electronically supplied services" (for example physical goods), change `TAX_CODE` in
+`src/lib/stripe.ts`.
+
 ## Email
 
-Agora sends email for creator invitations, creator applications and their decisions. Set it up
+Agora has an email framework for outgoing messages. For now a single-creator site only sends the
+test message; notification emails will build on it. Set it up
 in **Settings → Email** (owner only). Enter any SMTP server, press *Test connection and save*, and
 send yourself a test. Settings saved there take precedence over environment variables, so changing
 them needs no redeploy.
@@ -89,19 +120,7 @@ MAIL_PASSWORD=...
 MAIL_FROM=hello@example.com
 ```
 
-Without any mail settings, Agora still works: invites show their link on screen for the owner to
-copy. Passwords for the mail server are stored in the database, like the Stripe key.
-
-## Creators on a shared site
-
-A site can host one creator (the default: the site is that creator's page, with the support page at
-`/support`) or several. Turn several creators on in **Settings → Creators** and choose how people join:
-
-- **Invite only**: the owner sends an invitation link (emailed when email is set up).
-- **Open sign-up**: anyone can create a creator account and pick their own page name.
-- **Applications**: anyone can apply; the owner approves or rejects each application.
-
-Each creator has their own page at `/creators/<page name>`.
+Without any mail settings, Agora still works. Passwords for the mail server are stored in the database, like the Stripe key.
 
 ## Screenshots
 
@@ -174,9 +193,8 @@ Every demo account uses the password `demo-password`.
   comments, likes, members, refunds, blocks, messages). Docs are in Settings -> API docs.
 - On a single-creator instance the feed is the home page (`/`).
 - Likes (from the feed too, and on comments) and comments on posts, visible to people who can see the post.
-- One creator or many. A single-creator site is themed with the creator's theme, their name
-  replaces "Agora" in the header, and visitors land on their page. The owner can turn on
-  several creators in Settings → Creators, invite them by link and set each creator's page name.
+- A single-creator site: it is themed with the creator's theme, their name replaces "Agora" in the
+  header, and visitors land on their page.
 - Tiers can carry perks (a checklist), a badge such as "Most popular" and a highlight. Creators edit
   them on the Tiers page or directly on their support page.
 - Posts are written in a Markdown editor with a toolbar, shortcuts and a live preview. Images can be
@@ -213,8 +231,7 @@ promised; items move up when someone needs them. Contributions welcome (see
 - [ ] Automated tests for the webhook handler (signature failure, duplicate events, handler failure
       releasing the event claim) and for the access rules (`canView`, tier price comparisons).
 - [ ] Handle `invoice.payment_failed` grace periods and tell patrons when a card is failing.
-- [ ] Tax and VAT options, and per-creator payout reporting (CSV export of payments and refunds).
-- [ ] Stripe Connect, so creators on a shared instance can be paid directly (large change).
+- [ ] Tax and VAT options beyond the default product tax code (see Managed Payments above), a setting for the tax code, and per-creator payout reporting (CSV export of payments and refunds).
 
 ### Email
 

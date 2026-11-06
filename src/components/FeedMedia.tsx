@@ -76,7 +76,7 @@ export default function FeedMedia({ items, unlocked }: { items: FeedItem[]; unlo
         ) : item.kind === "IMAGE" ? (
           <button type="button" aria-label="Expand image" onClick={() => setLightbox(images.indexOf(item))} className="block w-full cursor-zoom-in">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={src} alt="" loading="lazy" className="max-h-96 w-full object-cover" />
+            <img src={src} alt="" loading="lazy" className="h-auto w-full" />
           </button>
         ) : item.kind === "VIDEO" ? (
           <video key={item.id} src={src} poster={`${src}?variant=thumb`} controls controlsList="nodownload" preload="none" className="aspect-video w-full bg-black" />

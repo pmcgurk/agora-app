@@ -52,7 +52,7 @@ export default async function CurrencySettings({
         </label>
         <p className="text-sm text-muted">
           In Stripe, create a webhook endpoint pointing at <code>{baseUrl}/api/stripe/webhook</code> with the events
-          checkout.session.completed, checkout.session.async_payment_succeeded, invoice.paid, invoice.payment_failed, customer.subscription.updated, customer.subscription.deleted and charge.refunded.
+          checkout.session.completed, checkout.session.async_payment_succeeded, invoice.paid, invoice.payment_failed, customer.subscription.updated, customer.subscription.deleted and charge.refunded. If your Stripe account has Managed Payments turned on, Agora sends the tax code it requires, so checkout works either way.
         </p>
         <div className="flex gap-3">
           <button className={buttonClass}>Save Stripe keys</button>

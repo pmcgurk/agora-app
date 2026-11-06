@@ -32,13 +32,19 @@ type CreatorRef = { id: string; name: string; slug: string | null; currency: str
 
 // Stripe prices are immutable, so a new one is created whenever the tier's amount or the
 // creator's currency no longer matches the stored one.
+// Stripe needs a product tax code on every product when Managed Payments is on, and it is harmless
+// when it is off. Memberships and tips are digital services: "General - Electronically Supplied Services".
+const TAX_CODE = "txcd_10000000";
+
 export async function ensureStripePrice(tier: TierRef, creator: CreatorRef): Promise<string> {
   const stripe = await getStripe();
   const currency = creator.currency.toLowerCase();
   if (tier.stripePriceId) {
     try {
-      const price = await stripe.prices.retrieve(tier.stripePriceId);
-      if (price.active && price.unit_amount === tier.price && price.currency === currency && price.recurring?.interval === "month") {
+      const price = await stripe.prices.retrieve(tier.stripePriceId, { expand: ["product"] });
+      // Prices made before tax codes were added are replaced, since a product's code cannot be reused otherwise.
+      const product = typeof price.product === "object" && !("deleted" in price.product) ? price.product : null;
+      if (product?.tax_code && price.tax_behavior === "inclusive" && price.active && price.unit_amount === tier.price && price.currency === currency && price.recurring?.interval === "month") {
         return price.id;
       }
     } catch {
@@ -48,8 +54,10 @@ export async function ensureStripePrice(tier: TierRef, creator: CreatorRef): Pro
   const price = await stripe.prices.create({
     currency,
     unit_amount: tier.price,
+    // The listed price is what the patron pays; any tax Stripe applies comes out of it, not on top.
+    tax_behavior: "inclusive",
     recurring: { interval: "month" },
-    product_data: { name: `${creator.name} - ${tier.name}`, metadata: { tierId: tier.id } },
+    product_data: { name: `${creator.name} - ${tier.name}`, tax_code: TAX_CODE, metadata: { tierId: tier.id } },
     metadata: { tierId: tier.id },
   });
   await prisma.tier.update({ where: { id: tier.id }, data: { stripePriceId: price.id } });
@@ -112,7 +120,8 @@ export async function createTipCheckoutUrl(creator: CreatorRef, returnPath: stri
         price_data: {
           currency: creator.currency.toLowerCase(),
           unit_amount: amount,
-          product_data: { name: `Tip for ${creator.name}` },
+          tax_behavior: "inclusive",
+          product_data: { name: `Tip for ${creator.name}`, tax_code: TAX_CODE },
         },
         quantity: 1,
       },

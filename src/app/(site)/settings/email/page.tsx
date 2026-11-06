@@ -28,7 +28,7 @@ export default async function EmailSettings({
       <div>
         <h2 className="text-xl font-semibold">Email</h2>
         <p className="text-sm text-muted">
-          Used for creator invites, creator applications and their decisions. Any SMTP server works: a
+          Outgoing email for this site. Any SMTP server works: a
           mail provider, your hosting company, or a self-hosted relay.
         </p>
       </div>
@@ -37,7 +37,7 @@ export default async function EmailSettings({
       <div className={`${cardClass} p-4 text-sm`}>
         {source === "database" && <p>Sending with the settings saved here.</p>}
         {source === "environment" && <p>Sending with the MAIL_* environment variables. Saving here overrides them.</p>}
-        {source === "none" && <p className="text-muted">Email is off. Invites will still show their link on screen.</p>}
+        {source === "none" && <p className="text-muted">Email is off.</p>}
       </div>
 
       <MailSettingsForm

@@ -67,7 +67,7 @@ export default async function CreatorShell({
             <Link href={homeHref} className={linkClass}>Posts</Link>
             <Link href={await supportPath(creator)} className={linkClass}>Support</Link>
             {showTip && (
-              <Link href={`${homeHref}#tip`} className="agora-tip-link ml-auto rounded-full border border-line px-3 text-sm leading-6 hover:border-primary hover:text-primary">
+              <Link href={`${await supportPath(creator)}#tip`} className="agora-tip-link ml-auto rounded-full border border-line px-3 text-sm leading-6 hover:border-primary hover:text-primary">
                 <span aria-hidden="true">♥</span> Tip
               </Link>
             )}

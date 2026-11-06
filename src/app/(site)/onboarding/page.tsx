@@ -6,7 +6,6 @@ import WizardSteps from "@/components/WizardSteps";
 import { buttonClass, cardClass, inputClass, secondaryButtonClass } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
 import { CURRENCIES } from "@/lib/currency";
-import { isInstanceOwner } from "@/lib/instance";
 import { paymentMode } from "@/lib/payments";
 import { WIZARD_STEPS } from "@/lib/profile-fields";
 
@@ -31,7 +30,7 @@ export default async function OnboardingPage({
         {payments ? (
           <PaymentsStep currency={user.currency} />
         ) : (
-          <ProfileStep user={user} owner={await isInstanceOwner(user.id)} />
+          <ProfileStep user={user} />
         )}
         <form action={skipOnboarding}>
           <button className="text-sm text-muted underline">Skip setup for now</button>
@@ -43,10 +42,8 @@ export default async function OnboardingPage({
 
 function ProfileStep({
   user,
-  owner,
 }: {
   user: { name: string; tagline: string | null; bio: string | null };
-  owner: boolean;
 }) {
   return (
     <>
@@ -67,19 +64,6 @@ function ProfileStep({
           About
           <textarea name="bio" rows={4} maxLength={2000} defaultValue={user.bio ?? ""} className={inputClass} />
         </label>
-        {owner && (
-          <label className="block space-y-1 text-sm font-medium">
-            Will this site host more than one creator?
-            <select name="multiCreator" defaultValue="no" className={inputClass}>
-              <option value="no">No, it is just my page</option>
-              <option value="yes">Yes, I will invite other creators</option>
-            </select>
-            <span className="block text-xs font-normal text-muted">
-              With several creators, each gets their own page at /creators/page-name. You can invite them from
-              Settings &rarr; Creators.
-            </span>
-          </label>
-        )}
         <button className={buttonClass}>Continue</button>
       </form>
     </>
