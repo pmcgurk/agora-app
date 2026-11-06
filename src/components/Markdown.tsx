@@ -1,4 +1,5 @@
 import { Fragment, type ReactNode } from "react";
+import { parseEmbed } from "@/lib/embeds";
 
 // A small, dependency-free Markdown renderer. It builds React elements (never raw HTML), so post
 // text cannot inject markup or scripts. Supports headings, bold, italic, strikethrough, inline code,
@@ -14,6 +15,8 @@ const INLINE =
   /`([^`\n]+)`|\*\*([^\n]+?)\*\*|__([^\n]+?)__|~~([^\n]+?)~~|\*([^*\n]+?)\*|(?<![\w])_([^_\n]+?)_(?![\w])|!\[([^\]\n]*)\]\(([^)\s]+)\)|\[([^\]\n]+)\]\(([^)\s]+)\)|(https?:\/\/[^\s<]+[^\s<.,;:!?)"'])/g;
 
 const MEDIA_PATH = /^\/api\/media\/[A-Za-z0-9_-]{1,64}$/;
+// A link on a line of its own (bare, or as [text](link)) may become an embedded player.
+const STANDALONE_LINK = /^\s*(?:\[[^\]\n]*\]\((https?:\/\/[^)\s]+)\)|(https?:\/\/\S+))\s*$/;
 const STANDALONE_IMAGE = /^\s*!\[([^\]\n]*)\]\(([^)\s]+)\)\s*$/;
 
 function safeHref(href: string): string | null {
@@ -139,6 +142,24 @@ export default function Markdown({
       const [, alt, src] = line.match(STANDALONE_IMAGE)!;
       blocks.push(image(ctx, alt, src, id, true));
       i++;
+    } else if (STANDALONE_LINK.test(line) && parseEmbed(line.match(STANDALONE_LINK)![1] ?? line.match(STANDALONE_LINK)![2])) {
+      const match = line.match(STANDALONE_LINK)!;
+      const embed = parseEmbed(match[1] ?? match[2])!;
+      blocks.push(
+        <div key={id} className={embed.ratio === "audio" ? "h-[152px]" : "aspect-video"}>
+          <iframe
+            src={embed.src}
+            title={embed.title}
+            loading="lazy"
+            allow="encrypted-media; picture-in-picture; fullscreen"
+            allowFullScreen
+            referrerPolicy="strict-origin-when-cross-origin"
+            sandbox="allow-scripts allow-same-origin allow-presentation allow-popups"
+            className="h-full w-full rounded-theme border-0"
+          />
+        </div>,
+      );
+      i++;
     } else if (RULE.test(line)) {
       blocks.push(<hr key={id} className="border-line" />);
       i++;
@@ -172,7 +193,8 @@ export default function Markdown({
         !BULLET.test(lines[i]) &&
         !ORDERED.test(lines[i]) &&
         !RULE.test(lines[i]) &&
-        !STANDALONE_IMAGE.test(lines[i])
+        !STANDALONE_IMAGE.test(lines[i]) &&
+        !(STANDALONE_LINK.test(lines[i]) && parseEmbed(lines[i].match(STANDALONE_LINK)![1] ?? lines[i].match(STANDALONE_LINK)![2]))
       ) {
         paragraph.push(lines[i++]);
       }

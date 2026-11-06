@@ -65,6 +65,7 @@ const TOOLS = {
   quote: (v: string, s: number, e: number) => prefixLines(v, s, e, "> ", /^>\s?/),
   bullets: (v: string, s: number, e: number) => prefixLines(v, s, e, "- ", /^[-*+]\s/),
   numbered: (v: string, s: number, e: number) => prefixLines(v, s, e, (index) => `${index + 1}. `, /^\d+[.)]\s/),
+  video: (v: string, s: number, e: number) => insertBlock(v, s, e, "https://www.youtube.com/watch?v=", 0, 32),
   divider: (v: string, s: number, e: number) => insertBlock(v, s, e, "---", 0, 3),
 } satisfies Record<string, (value: string, start: number, end: number) => Edit>;
 
@@ -82,6 +83,7 @@ const BUTTONS: { tool: ToolName; label: string; title: string; content: ReactNod
   { tool: "link", label: "Link", title: "Link (Ctrl+K)", content: "Link" },
   { tool: "code", label: "Inline code", title: "Inline code", content: "</>" },
   { tool: "codeBlock", label: "Code block", title: "Code block", content: "{ }" },
+  { tool: "video", label: "Embed video", title: "Embed a video: paste a YouTube, Vimeo, Loom or Spotify link on its own line", content: "▶ Video" },
   { tool: "divider", label: "Divider", title: "Horizontal line", content: "—" },
 ];
 
@@ -228,7 +230,7 @@ export default function MarkdownEditor({
             className={`${inputClass} min-h-72 font-mono text-[0.95rem] leading-relaxed`}
           />
           <p className="text-xs text-muted">
-            Markdown: **bold**, *italic*, ~~strike~~, # headings, &gt; quotes, - lists, [links](https://…), ![images](…). Ctrl+B, Ctrl+I and Ctrl+K work too.
+            Markdown: **bold**, *italic*, ~~strike~~, # headings, &gt; quotes, - lists, [links](https://…), ![images](…). A YouTube, Vimeo, Loom or Spotify link on its own line becomes a player. Ctrl+B, Ctrl+I and Ctrl+K work too.
             {" "}{words} {words === 1 ? "word" : "words"}.
           </p>
         </>

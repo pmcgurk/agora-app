@@ -1,3 +1,4 @@
+import { EMBED_ORIGINS } from "@/lib/embeds";
 import { NextResponse } from "next/server";
 
 function origin(value: string | undefined): string {
@@ -21,6 +22,7 @@ export function proxy() {
     `img-src 'self' data: blob: ${storage}`.trim(),
     `media-src 'self' blob: ${storage}`.trim(),
     `connect-src 'self' ${storage}`.trim(),
+    `frame-src ${EMBED_ORIGINS.join(" ")}`,
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
