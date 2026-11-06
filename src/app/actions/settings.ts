@@ -12,6 +12,7 @@ import { paymentMode, STRIPE_KEY_PATTERN, STRIPE_WEBHOOK_SECRET_PATTERN, stripeC
 import { prisma } from "@/lib/prisma";
 import { SLUG_PATTERN } from "@/lib/profile-fields";
 import { setInstancePrivate } from "@/lib/instance";
+import { DEFAULT_PAGE_SIZE, FEED_PAGE_SIZES } from "@/lib/feed";
 import { COLOR_PATTERN, parseThemeFile, RADIUS_PATTERN } from "@/themes";
 import { isFontKey } from "@/themes/fonts";
 import { COLOR_KEYS, isThemeName } from "@/themes/registry";
@@ -185,6 +186,15 @@ export async function savePayments(formData: FormData) {
 }
 
 const MAX_TIER_DESCRIPTION = 400;
+
+export async function saveFeedPaging(formData: FormData) {
+  const user = await requireUser("CREATOR");
+  const feedPaging = text(formData, "feedPaging") === "pages" ? "pages" : "scroll";
+  const size = Number(text(formData, "feedPageSize"));
+  const feedPageSize = (FEED_PAGE_SIZES as readonly number[]).includes(size) ? size : DEFAULT_PAGE_SIZE;
+  await prisma.user.update({ where: { id: user.id }, data: { feedPaging, feedPageSize } });
+  done("feed", "Feed settings saved.");
+}
 
 export async function saveTips(formData: FormData) {
   const user = await requireUser("CREATOR");

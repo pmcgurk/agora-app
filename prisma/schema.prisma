@@ -57,6 +57,10 @@ model User {
   tipsEnabled      Boolean          @default(false)
   // Shown to someone right after they leave a tip.
   tipThanks        String?
+  // How the feed loads more posts: "scroll" (infinite scrolling) or "pages".
+  feedPaging       String           @default("scroll")
+  // Posts per scroll batch or page.
+  feedPageSize     Int              @default(5)
   showPoweredBy    Boolean          @default(true)
   // Google Font choices (keys from src/themes/fonts.ts); null keeps the theme's font.
   fontBody         String?

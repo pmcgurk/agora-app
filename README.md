@@ -198,6 +198,11 @@ Every demo account uses the password `demo-password`.
 - One creator workspace: Overview, Posts, Members, Tiers and Analytics, then Settings (Profile,
   Appearance, Payments, Notifications, Privacy, Account), with rarely used technical pages (Email, API
   keys, Webhooks, API docs) under a collapsed "Advanced" group.
+- Feeds load five posts at a time (3, 5, 10 or 20) with infinite scrolling, or Newer/Older pages, as the
+  creator picks in Settings → Advanced → Feed. A "Load new posts" button appears on an open page when the
+  creator publishes something new (checked every 30 seconds while the tab is visible). Long posts are clipped with a fade and a "View full post" link.
+- Patrons can search a creator's posts. Titles are always searched; post text only in posts the
+  searcher can open, so a search never reveals what is inside a locked post.
 - Creators see an "Edit post" button on their own posts, in the feed and on the post page.
 - Custom thank-you messages: one per tier (shown after someone joins) and one for tips (Settings → Payments).
 - The setup wizard walks through connecting Stripe (API key, webhook, payouts) if it isn't connected yet.
