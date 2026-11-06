@@ -6,7 +6,7 @@ import LikeButton from "@/components/LikeButton";
 import Markdown from "@/components/Markdown";
 import ShareButton from "@/components/ShareButton";
 import Flash from "@/components/Flash";
-import { buttonClass, cardClass, linkClass } from "@/components/ui";
+import { cardClass, linkClass } from "@/components/ui";
 import { activeSubscriptionWhere, canView, getAccessContext } from "@/lib/access";
 import { patronCanMessage } from "@/lib/dm";
 import { getCurrentUser } from "@/lib/auth";
@@ -70,28 +70,22 @@ export default async function CreatorFeed({
 
   return (
     <>
-      {creator.bio && <p className="whitespace-pre-wrap">{creator.bio}</p>}
+      {creator.bio && <p className="whitespace-pre-wrap text-muted">{creator.bio}</p>}
       <Flash notice={notice} error={error} />
 
 
-      {tiers.length > 0 && (
+      {viewer?.id !== creator.id && (memberTier || canMessage || dmLocked) && (
         <section aria-label="Membership" className={`${cardClass} agora-tier flex flex-wrap items-center justify-between gap-3`}>
-          <p>
-            {memberTier
-              ? memberTier.price === 0
-                ? "You follow this creator."
-                : `You're a ${memberTier.name} member.`
-              : `Support ${creator.name}`}
-          </p>
+          {memberTier && (
+            <p>{memberTier.price === 0 ? "You follow this creator." : `You're a ${memberTier.name} member.`}</p>
+          )}
           {memberPlan && !memberPlan.gifted && memberTier && viewer?.role === "PATRON" && (
             <EndPlan subscription={memberPlan} paid={memberTier.price > 0} returnTo={base} />
           )}
           {dmLocked && <span className="text-sm text-muted">{dmLocked}</span>}
           {canMessage && <Link href={`/messages/${creator.id}`} className={linkClass}>Message</Link>}
-          {viewer?.id !== creator.id && (
-            <Link href={supportHref} className={memberTier ? linkClass : buttonClass}>
-              {memberTier ? "Change plan" : "See tiers"}
-            </Link>
+          {memberTier && tiers.some((tier) => tier.price > 0 && tier.active) && (
+            <Link href={supportHref} className={linkClass}>Change plan</Link>
           )}
         </section>
       )}
@@ -139,6 +133,11 @@ export default async function CreatorFeed({
                   {post._count.comments}
                 </Link>
                 <ShareButton path={`${base}/posts/${post.id}`} title={post.title} />
+                {access.isOwner && (
+                  <Link href={`/dashboard/posts/${post.id}/edit`} className="rounded-full border border-line px-3 py-1 hover:border-primary hover:text-primary">
+                    Edit post
+                  </Link>
+                )}
                 <Link href={`${base}/posts/${post.id}`} className={`${linkClass} ml-auto`}>
                   {unlocked ? "View full post" : "View teaser"}
                 </Link>

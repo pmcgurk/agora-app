@@ -81,7 +81,7 @@ real Checkout instead:
    prints as `STRIPE_WEBHOOK_SECRET` (it changes each time you start `stripe listen`).
 2. Use a test key (`sk_test_...`). A restricted key needs write access to Customers, Products,
    Prices and Checkout Sessions.
-3. Turn on payments in Settings → Monetization, make a paid tier, then subscribe or tip from a
+3. Turn on payments in Settings → Payments, make a paid tier, then subscribe or tip from a
    second account with card `4242 4242 4242 4242` (any future expiry and CVC). Card
    `4000 0000 0000 0341` attaches fine and then fails on renewal.
 
@@ -195,6 +195,14 @@ Every demo account uses the password `demo-password`.
 - Likes (from the feed too, and on comments) and comments on posts, visible to people who can see the post.
 - A single-creator site: it is themed with the creator's theme, their name replaces "Agora" in the
   header, and visitors land on their page.
+- One creator workspace: Overview, Posts, Members, Tiers and Analytics, then Settings (Profile,
+  Appearance, Payments, Notifications, Privacy, Account), with rarely used technical pages (Email, API
+  keys, Webhooks, API docs) under a collapsed "Advanced" group.
+- Creators see an "Edit post" button on their own posts, in the feed and on the post page.
+- Custom thank-you messages: one per tier (shown after someone joins) and one for tips (Settings → Payments).
+- The setup wizard walks through connecting Stripe (API key, webhook, payouts) if it isn't connected yet.
+- Switching tier replaces the old plan: the previous plan is ended straight away (and cancelled in Stripe),
+  so a patron is never billed for two tiers of the same creator.
 - Tiers can carry perks (a checklist), a badge such as "Most popular" and a highlight. Creators edit
   them on the Tiers page or directly on their support page.
 - Posts are written in a Markdown editor with a toolbar, shortcuts and a live preview. Images can be

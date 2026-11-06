@@ -22,7 +22,7 @@ export async function sendTip(formData: FormData) {
   await requireInstanceAccess();
   const creator = await prisma.user.findFirst({
     where: { id: String(formData.get("creatorId") ?? ""), role: "CREATOR" },
-    select: { id: true, name: true, slug: true, currency: true, tipsEnabled: true },
+    select: { id: true, name: true, slug: true, currency: true, tipsEnabled: true, tipThanks: true },
   });
   if (!creator) redirect("/");
   const base = creatorPath(creator);
@@ -55,7 +55,7 @@ export async function sendTip(formData: FormData) {
 
   if (mode === "test") {
     await recordTip({ patronId: viewer?.id ?? null, creatorId: creator.id, amount: amount, currency: creator.currency, message, tipperName });
-    redirect(`${base}?notice=${encodeURIComponent("Thanks for your tip! (Test mode: no payment was taken.)")}`);
+    redirect(`${base}?notice=${encodeURIComponent(`${creator.tipThanks || "Thanks for your tip!"} (Test mode: no payment was taken.)`)}`);
   }
 
   let url: string;

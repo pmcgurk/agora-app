@@ -77,6 +77,7 @@ export default async function SupportView({
                 perks: tier.perks,
                 badge: tier.badge,
                 highlighted: tier.highlighted,
+                welcomeMessage: tier.welcomeMessage,
                 active: tier.active,
               }}
               currency={creator.currency}

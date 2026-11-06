@@ -68,7 +68,7 @@ export async function SiteHeader() {
               <Avatar user={user} size={28} />
             </Link>
             <Link href="/dashboard" className={linkClass}>Dashboard</Link>
-            <Link href="/settings" className={linkClass}>Settings</Link>
+            {user.role !== "CREATOR" && <Link href="/settings" className={linkClass}>Settings</Link>}
             <form action={logout}>
               <button className="underline">Log out</button>
             </form>

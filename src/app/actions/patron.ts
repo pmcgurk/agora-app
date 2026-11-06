@@ -24,7 +24,7 @@ export async function subscribe(formData: FormData) {
   if (tier.price === 0) {
     if (await hasActivePaidPlan(user.id, tier.creatorId)) redirect(`${base}?notice=${encodeURIComponent("Following is included in your plan.")}`);
     await activate(user.id, tier);
-    redirect(`${base}?notice=${encodeURIComponent("You're now following.")}`);
+    redirect(`${base}?notice=${encodeURIComponent(tier.welcomeMessage || "You're now following.")}`);
   }
   const mode = await paymentMode();
   if (!tier.active) {
@@ -63,7 +63,7 @@ export async function completeTestCheckout(formData: FormData) {
   await prisma.payment.create({
     data: { patronId: user.id, creatorId: creator.id, tierId: tier.id, amount: tier.price, currency: creator.currency },
   });
-  redirect(`${creatorPath(creator)}?notice=${encodeURIComponent(`Welcome to ${tier.name}!`)}`);
+  redirect(`${creatorPath(creator)}?notice=${encodeURIComponent(tier.welcomeMessage || `Welcome to ${tier.name}!`)}`);
 }
 
 // Ends the patron's plan: paid Stripe plans keep working until the period they paid for is over.

@@ -40,7 +40,7 @@ export async function endPlan(subscriptionId: string, options: { atPeriodEnd: bo
 // One plan per creator: every other active plan is ended right away.
 export async function endOtherPlans(patronId: string, creatorId: string, keepTierId: string | null): Promise<void> {
   const others = await prisma.subscription.findMany({
-    where: { patronId, status: "ACTIVE", tier: { creatorId }, ...(keepTierId ? { tierId: { not: keepTierId } } : {}) },
+    where: { patronId, status: { in: ["ACTIVE", "PAST_DUE"] }, tier: { creatorId }, ...(keepTierId ? { tierId: { not: keepTierId } } : {}) },
     select: { id: true },
   });
   for (const other of others) await endPlan(other.id, { atPeriodEnd: false });

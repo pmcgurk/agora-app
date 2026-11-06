@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { finishOnboarding, saveOnboardingProfile, skipOnboarding } from "@/app/actions/onboarding";
+import { finishOnboarding, saveOnboardingProfile, saveOnboardingStripe, skipOnboarding } from "@/app/actions/onboarding";
 import Flash from "@/components/Flash";
 import Logo from "@/components/Logo";
 import WizardSteps from "@/components/WizardSteps";
@@ -7,6 +7,7 @@ import { buttonClass, cardClass, inputClass, secondaryButtonClass } from "@/comp
 import { requireUser } from "@/lib/auth";
 import { CURRENCIES } from "@/lib/currency";
 import { paymentMode } from "@/lib/payments";
+import { publicUrl } from "@/lib/urls";
 import { WIZARD_STEPS } from "@/lib/profile-fields";
 
 export const dynamic = "force-dynamic";
@@ -14,11 +15,11 @@ export const dynamic = "force-dynamic";
 export default async function OnboardingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; step?: string }>;
+  searchParams: Promise<{ error?: string; notice?: string; step?: string }>;
 }) {
   const user = await requireUser("CREATOR");
   if (user.onboardedAt) redirect("/dashboard");
-  const { error, step } = await searchParams;
+  const { error, notice, step } = await searchParams;
   const payments = step === "payments";
 
   return (
@@ -26,7 +27,7 @@ export default async function OnboardingPage({
       <h1 className="text-center"><Logo className="text-4xl" /></h1>
       <WizardSteps steps={WIZARD_STEPS} current={payments ? 2 : 1} />
       <section className={`${cardClass} space-y-4`}>
-        <Flash error={error} />
+        <Flash error={error} notice={notice} />
         {payments ? (
           <PaymentsStep currency={user.currency} />
         ) : (
@@ -113,8 +114,8 @@ async function PaymentsStep({ currency }: { currency: string }) {
           </>
         ) : (
           <p role="note" className="rounded-theme bg-secondary p-3">
-            No payment provider is configured on this instance, so you will start with followers only. Add your
-            Stripe API key in Settings &gt; Monetization, then enable paid tiers there.
+            Stripe isn&apos;t connected yet, so you will start with followers only. Connect it below (about five
+            minutes), or finish now and do it later in Settings &rarr; Payments.
           </p>
         )}
         <div className="flex gap-3">
@@ -122,6 +123,49 @@ async function PaymentsStep({ currency }: { currency: string }) {
           <button className={buttonClass}>Finish setup</button>
         </div>
       </form>
+      {!available && <StripeGuide />}
     </>
+  );
+}
+
+function StripeGuide() {
+  const webhook = publicUrl("/api/stripe/webhook");
+  return (
+    <details className="rounded-theme border border-line p-4" open>
+      <summary className="cursor-pointer font-semibold">Connect Stripe to take payments</summary>
+      <div className="mt-3 space-y-3 text-sm">
+        <p className="text-muted">
+          Stripe handles the cards and pays the money to your bank account. Agora never sees card details or holds
+          your money, and takes no fee (Stripe&apos;s own card fees apply).
+        </p>
+        <ol className="list-decimal space-y-2 pl-5">
+          <li>
+            Create a free account at <a href="https://dashboard.stripe.com/register" target="_blank" rel="noopener noreferrer" className="text-primary underline">dashboard.stripe.com</a>.
+            Stay in <strong>Test mode</strong> (the toggle at the top) while you try things out.
+          </li>
+          <li>
+            Go to <strong>Developers &rarr; API keys</strong> and copy the <strong>Secret key</strong> (starts with <code>sk_test_</code>).
+          </li>
+          <li>
+            Go to <strong>Developers &rarr; Webhooks</strong> and add an endpoint pointing at <code className="break-all">{webhook}</code> with
+            the events <code className="break-all">checkout.session.completed, checkout.session.async_payment_succeeded, invoice.paid, invoice.payment_failed, customer.subscription.updated, customer.subscription.deleted, charge.refunded</code>.
+            Copy its <strong>Signing secret</strong> (starts with <code>whsec_</code>). Running on your own computer? Use the Stripe CLI instead:
+            <code className="ml-1 break-all">stripe listen --forward-to localhost:3000/api/stripe/webhook</code>
+          </li>
+          <li>Paste both below. When you are ready for real money, switch Stripe to live mode and replace the keys in Settings &rarr; Payments. Set up your bank details under Stripe &rarr; Settings &rarr; Payouts.</li>
+        </ol>
+        <form action={saveOnboardingStripe} className="space-y-3">
+          <label className="block">
+            Secret key
+            <input name="stripeSecretKey" type="password" autoComplete="off" placeholder="sk_test_…" required className={inputClass} />
+          </label>
+          <label className="block">
+            Webhook signing secret
+            <input name="stripeWebhookSecret" type="password" autoComplete="off" placeholder="whsec_…" className={inputClass} />
+          </label>
+          <button className={secondaryButtonClass}>Save Stripe keys</button>
+        </form>
+      </div>
+    </details>
   );
 }

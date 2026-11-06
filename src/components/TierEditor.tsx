@@ -12,6 +12,7 @@ export type TierValues = {
   perks: string[];
   badge: string | null;
   highlighted: boolean;
+  welcomeMessage?: string | null;
   active: boolean;
 };
 
@@ -43,6 +44,7 @@ export default function TierEditor({
   const [price, setPrice] = useState(tier && tier.price > 0 ? (tier.price / 100).toFixed(2) : "");
   const [description, setDescription] = useState(tier?.description ?? "");
   const [badge, setBadge] = useState(tier?.badge ?? "");
+  const [welcome, setWelcome] = useState(tier?.welcomeMessage ?? "");
   const [highlighted, setHighlighted] = useState(tier?.highlighted ?? false);
   const [perks, setPerks] = useState(() => (tier?.perks ?? []).map(row));
 
@@ -103,6 +105,19 @@ export default function TierEditor({
                 onChange={(event) => setDescription(event.target.value)}
                 className={inputClass}
               />
+            </label>
+            <label className="block space-y-1 text-sm font-medium">
+              Thank-you message
+              <textarea
+                name="welcomeMessage"
+                rows={2}
+                maxLength={500}
+                value={welcome}
+                onChange={(event) => setWelcome(event.target.value)}
+                placeholder={`Welcome to ${name || "the tier"}!`}
+                className={inputClass}
+              />
+              <span className="block text-xs font-normal text-muted">Shown to people right after they join. Leave blank for the default.</span>
             </label>
           </fieldset>
 

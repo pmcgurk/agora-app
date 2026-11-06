@@ -3,9 +3,8 @@
 import { redirect } from "next/navigation";
 import { createSession, requireUser } from "@/lib/auth";
 import { isSupportedCurrency } from "@/lib/currency";
-import { isInstanceOwner, setMultiCreator } from "@/lib/instance";
 import { hashPassword } from "@/lib/password";
-import { paymentMode } from "@/lib/payments";
+import { paymentMode, STRIPE_KEY_PATTERN, STRIPE_WEBHOOK_SECRET_PATTERN } from "@/lib/payments";
 import { prisma } from "@/lib/prisma";
 import { clientIp, withinLimit } from "@/lib/rate-limit";
 
@@ -85,11 +84,22 @@ export async function saveOnboardingProfile(formData: FormData) {
     data: { name, tagline: tagline || null, bio: bio || null },
   });
 
-  // Only the owner decides whether this instance hosts more than one creator.
-  if (await isInstanceOwner(user.id)) {
-    await setMultiCreator(formData.get("multiCreator") === "yes");
-  }
   redirect("/onboarding?step=payments");
+}
+
+// Step 3a: connect Stripe from inside the wizard, then come back to the payments step.
+export async function saveOnboardingStripe(formData: FormData) {
+  await requireOnboarding();
+  const path = "/onboarding?step=payments";
+  const secretKey = text(formData, "stripeSecretKey");
+  const webhookSecret = text(formData, "stripeWebhookSecret");
+  if (!STRIPE_KEY_PATTERN.test(secretKey)) {
+    failAt(path, "That doesn't look like a Stripe secret key. It should start with sk_test_ or sk_live_ (or rk_ for a restricted key).");
+  }
+  if (webhookSecret && !STRIPE_WEBHOOK_SECRET_PATTERN.test(webhookSecret)) failAt(path, "The webhook signing secret should start with whsec_.");
+  const data = { stripeSecretKey: secretKey, ...(webhookSecret ? { stripeWebhookSecret: webhookSecret } : {}) };
+  await prisma.instanceSetting.upsert({ where: { id: "instance" }, update: data, create: { id: "instance", ...data } });
+  redirect(`${path}&notice=${encodeURIComponent("Stripe connected.")}`);
 }
 
 // Step 3: optional payments. Without them the creator only has the free Follower tier.

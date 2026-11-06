@@ -27,8 +27,8 @@ export async function getStripe(): Promise<Stripe> {
   return client.stripe;
 }
 
-type TierRef = { id: string; name: string; price: number; stripePriceId: string | null };
-type CreatorRef = { id: string; name: string; slug: string | null; currency: string };
+type TierRef = { id: string; name: string; price: number; stripePriceId: string | null; welcomeMessage?: string | null };
+type CreatorRef = { id: string; name: string; slug: string | null; currency: string; tipThanks?: string | null };
 
 // Stripe prices are immutable, so a new one is created whenever the tier's amount or the
 // creator's currency no longer matches the stored one.
@@ -89,7 +89,7 @@ export async function createCheckoutUrl(
     client_reference_id: patron.id,
     metadata,
     subscription_data: { metadata },
-    success_url: absoluteUrl(`${base}?notice=${encodeURIComponent(`Welcome to ${tier.name}!`)}`),
+    success_url: absoluteUrl(`${base}?notice=${encodeURIComponent(tier.welcomeMessage || `Welcome to ${tier.name}!`)}`),
     cancel_url: absoluteUrl(await supportPath(creator)),
   });
   if (!session.url) throw new Error("Stripe did not return a checkout URL.");
@@ -129,7 +129,7 @@ export async function createTipCheckoutUrl(creator: CreatorRef, returnPath: stri
     ...(patron ? { client_reference_id: patron.id } : {}),
     metadata,
     payment_intent_data: { metadata },
-    success_url: absoluteUrl(`${base}?notice=${encodeURIComponent("Thanks for your tip!")}`),
+    success_url: absoluteUrl(`${base}?notice=${encodeURIComponent(creator.tipThanks || "Thanks for your tip!")}`),
     cancel_url: absoluteUrl(returnPath),
   });
   if (!session.url) throw new Error("Stripe did not return a checkout URL.");

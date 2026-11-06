@@ -55,6 +55,8 @@ model User {
   acceptsPayments  Boolean          @default(false)
   // Creators can take one-off tips from patrons, independently of paid tiers.
   tipsEnabled      Boolean          @default(false)
+  // Shown to someone right after they leave a tip.
+  tipThanks        String?
   showPoweredBy    Boolean          @default(true)
   // Google Font choices (keys from src/themes/fonts.ts); null keeps the theme's font.
   fontBody         String?
@@ -120,6 +122,8 @@ model Tier {
   perks           String[]       @default([])
   // Optional label such as "Most popular", and whether the card is emphasised.
   badge           String?
+  // Shown to a patron right after they join this tier.
+  welcomeMessage  String?
   highlighted     Boolean        @default(false)
   mutes           TierMute[]
   payments        Payment[]

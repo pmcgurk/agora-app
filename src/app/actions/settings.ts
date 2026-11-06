@@ -192,7 +192,9 @@ export async function saveTips(formData: FormData) {
   if (enable && (await paymentMode()) === "off") {
     fail("monetization", "Payments are not configured on this instance. Add your Stripe API key first.");
   }
-  await prisma.user.update({ where: { id: user.id }, data: { tipsEnabled: enable } });
+  const tipThanks = text(formData, "tipThanks");
+  if (tipThanks.length > MAX_THANKS_LENGTH) fail("monetization", `Thank-you messages are limited to ${MAX_THANKS_LENGTH} characters.`);
+  await prisma.user.update({ where: { id: user.id }, data: { tipsEnabled: enable, tipThanks: tipThanks || null } });
   done("monetization", enable ? "Tips enabled." : "Tips disabled.");
 }
 
@@ -249,6 +251,8 @@ function returnPath(formData: FormData): string {
   return allowed ? value : "/dashboard/tiers";
 }
 
+const MAX_THANKS_LENGTH = 500;
+
 // Perks arrive as one "perk" field per row; blank rows are dropped.
 function presentationFields(formData: FormData, path: string) {
   const perks = formData
@@ -259,14 +263,16 @@ function presentationFields(formData: FormData, path: string) {
   if (perks.some((perk) => perk.length > MAX_PERK_LENGTH)) fail(path, `Each perk can be up to ${MAX_PERK_LENGTH} characters.`);
   const badge = text(formData, "badge");
   if (badge.length > MAX_BADGE_LENGTH) fail(path, `Badges are limited to ${MAX_BADGE_LENGTH} characters.`);
-  return { perks, badge: badge || null, highlighted: formData.get("highlighted") === "on" };
+  const welcomeMessage = text(formData, "welcomeMessage");
+  if (welcomeMessage.length > MAX_THANKS_LENGTH) fail(path, `Thank-you messages are limited to ${MAX_THANKS_LENGTH} characters.`);
+  return { perks, badge: badge || null, highlighted: formData.get("highlighted") === "on", welcomeMessage: welcomeMessage || null };
 }
 
 export async function createTier(formData: FormData) {
   const user = await requireUser("CREATOR");
   const path = returnPath(formData);
   if (!user.acceptsPayments || (await paymentMode()) === "off") {
-    fail(path, "Turn on payments in Settings > Monetization to add paid tiers.");
+    fail(path, "Turn on payments in Settings > Payments to add paid tiers.");
   }
   const name = text(formData, "name");
   const price = parsePrice(formData);
@@ -313,7 +319,7 @@ export async function setTierActive(formData: FormData) {
   if (tier.price === 0) fail("/dashboard/tiers", "The free Follower tier can't be turned off.");
   const active = formData.get("active") === "1";
   if (active && (!user.acceptsPayments || (await paymentMode()) === "off")) {
-    fail("/dashboard/tiers", "Turn on payments in Settings > Monetization before turning a paid tier back on.");
+    fail("/dashboard/tiers", "Turn on payments in Settings > Payments before turning a paid tier back on.");
   }
   await prisma.tier.update({ where: { id: tier.id }, data: { active } });
   done("/dashboard/tiers", active ? "Tier turned on." : "Tier turned off. Current members keep access.");

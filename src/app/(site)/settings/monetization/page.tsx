@@ -21,6 +21,7 @@ export default async function CurrencySettings({
 
   return (
     <section className="space-y-4">
+      <h1 className="text-3xl font-bold text-primary">Payments</h1>
       <h2 className="text-xl font-semibold">Currency</h2>
       <Flash notice={notice} error={error} />
       <form action={saveCurrency} className="flex flex-wrap items-end gap-3">
@@ -84,6 +85,11 @@ export default async function CurrencySettings({
           <label className="flex items-center gap-2">
             <input type="checkbox" name="tipsEnabled" defaultChecked={user.tipsEnabled} />
             Let anyone send me one-off tips, no account needed
+          </label>
+          <label className="block space-y-1 text-sm font-medium">
+            Thank-you message
+            <textarea name="tipThanks" rows={2} maxLength={500} defaultValue={user.tipThanks ?? ""} placeholder="Thanks for your tip!" className={inputClass} />
+            <span className="block text-xs font-normal text-muted">Shown to people right after they tip. Leave blank for the default.</span>
           </label>
           <p className="text-sm text-muted">
             Tips can be anonymous and appear under Payments on the Members page, where you can refund them.

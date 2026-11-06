@@ -101,7 +101,15 @@ export default async function PostPage({ params }: { params: Promise<{ id: strin
         <Link href={homeHref} className={linkClass}>← All posts</Link>
       </p>
       <h2 className="text-2xl font-semibold">{post.title}</h2>
-      <p className="text-xs text-muted">{post.createdAt.toISOString().slice(0, 10)}</p>
+      <p className="text-xs text-muted">
+        {post.createdAt.toISOString().slice(0, 10)}
+        {access.isOwner && (
+          <>
+            {" · "}
+            <Link href={`/dashboard/posts/${post.id}/edit`} className={linkClass}>Edit post</Link>
+          </>
+        )}
+      </p>
 
       {unlocked ? (
         <>

@@ -78,6 +78,7 @@ export default async function TiersPage({
                   perks: tier.perks,
                   badge: tier.badge,
                   highlighted: tier.highlighted,
+                welcomeMessage: tier.welcomeMessage,
                   active: tier.active,
                 }}
                 currency={user.currency}
