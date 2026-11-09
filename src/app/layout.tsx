@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";
+import DemoBanner from "@/components/DemoBanner";
 import FontLink from "@/components/FontLink";
 import ThemeCss from "@/components/ThemeCss";
+import { isDemoMode } from "@/lib/demo";
 import { getSiteCreator } from "@/lib/instance";
 import { themeStyle } from "@/themes";
 
@@ -14,6 +16,8 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     title: creator?.name ?? "Agora",
     description: "A self-hosted platform for creators and their communities.",
+    // A public demo is not a site worth finding in search results.
+    ...(isDemoMode() ? { robots: { index: false, follow: false } } : {}),
   };
 }
 
@@ -26,6 +30,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
       <body data-theme-root style={creator ? themeStyle(creator.themeName, creator.themeSettings, creator) : undefined}>
         {creator && <FontLink fonts={creator} settings={creator.themeSettings} />}
         {creator && <ThemeCss settings={creator.themeSettings} />}
+        <DemoBanner />
         {children}
       </body>
     </html>

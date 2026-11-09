@@ -1,5 +1,6 @@
 "use server";
 
+import { blockInDemo } from "@/lib/demo-guard";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { isBlocked } from "@/lib/blocks";
@@ -13,6 +14,7 @@ const COOLDOWN_MS = 2000;
 // Messages only flow between the creator and their patrons, and only while the creator allows DMs.
 // The creator can reply to people who wrote to them first.
 export async function sendMessage(formData: FormData) {
+  await blockInDemo();
   const user = await requireUser();
   const toId = String(formData.get("to") ?? "");
   const body = String(formData.get("body") ?? "").trim();

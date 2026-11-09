@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import sharp from "sharp";
 import { getCurrentUser } from "@/lib/auth";
+import { DEMO_OFF, isDemoMode } from "@/lib/demo";
 import {
   isProfileImageKind,
   keyField,
@@ -36,6 +37,7 @@ export async function POST(request: Request) {
   if (!sameOrigin(request)) return NextResponse.json({ error: "Bad origin." }, { status: 403 });
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
+  if (isDemoMode()) return back(request, "error", DEMO_OFF);
 
   const form = await request.formData().catch(() => null);
   const kind = form?.get("kind");

@@ -1,5 +1,6 @@
 "use server";
 
+import { blockInDemo } from "@/lib/demo-guard";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { isBlocked } from "@/lib/blocks";
@@ -10,6 +11,7 @@ import { activate, endPlan, hasActivePaidPlan } from "@/lib/subscriptions";
 import { createCheckoutUrl, createPortalUrl } from "@/lib/stripe";
 
 export async function subscribe(formData: FormData) {
+  await blockInDemo();
   const user = await requireUser("PATRON");
   const tier = await prisma.tier.findUnique({ where: { id: String(formData.get("tierId") ?? "") } });
   if (!tier) redirect("/");
@@ -50,6 +52,7 @@ export async function subscribe(formData: FormData) {
 }
 
 export async function completeTestCheckout(formData: FormData) {
+  await blockInDemo();
   const user = await requireUser("PATRON");
   const tier = await prisma.tier.findUnique({ where: { id: String(formData.get("tierId") ?? "") } });
   if (!tier || tier.price === 0 || !tier.active || (await paymentMode()) !== "test") redirect("/");
@@ -68,6 +71,7 @@ export async function completeTestCheckout(formData: FormData) {
 
 // Ends the patron's plan: paid Stripe plans keep working until the period they paid for is over.
 export async function cancelSubscription(formData: FormData) {
+  await blockInDemo();
   const user = await requireUser("PATRON");
   const subscription = await prisma.subscription.findFirst({
     where: { id: String(formData.get("subscriptionId") ?? ""), patronId: user.id, status: "ACTIVE" },
@@ -89,6 +93,7 @@ export async function cancelSubscription(formData: FormData) {
 }
 
 export async function openBillingPortal() {
+  await blockInDemo();
   const user = await requireUser("PATRON");
   if ((await paymentMode()) !== "stripe") redirect("/settings/subscriptions");
   let url: string;

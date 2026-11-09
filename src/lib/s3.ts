@@ -50,6 +50,17 @@ export async function uploadObject(
   );
 }
 
+// True when the object already exists, so a re-seed can skip uploading it again.
+export async function objectExists(objectKey: string): Promise<boolean> {
+  internalClient ??= createClient(internalEndpoint());
+  try {
+    await internalClient.send(new HeadObjectCommand({ Bucket: bucketName(), Key: objectKey }));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function deleteObject(objectKey: string): Promise<void> {
   internalClient ??= createClient(internalEndpoint());
   await internalClient.send(new DeleteObjectCommand({ Bucket: bucketName(), Key: objectKey }));

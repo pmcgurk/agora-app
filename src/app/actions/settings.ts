@@ -1,5 +1,6 @@
 "use server";
 
+import { blockInDemo } from "@/lib/demo-guard";
 import { redirect } from "next/navigation";
 import { Prisma } from "@/generated/prisma/client";
 import { destroyOtherSessions, requireUser } from "@/lib/auth";
@@ -7,11 +8,13 @@ import { activeSubscriptionWhere } from "@/lib/access";
 import { getStripe } from "@/lib/stripe";
 import { normalizeSocialLink, SOCIAL_PLATFORMS } from "@/lib/social-links";
 import { isSupportedCurrency } from "@/lib/currency";
+import { DEMO_OFF, isDemoMode } from "@/lib/demo";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { paymentMode, STRIPE_KEY_PATTERN, STRIPE_WEBHOOK_SECRET_PATTERN, stripeConfigured } from "@/lib/payments";
 import { prisma } from "@/lib/prisma";
 import { SLUG_PATTERN } from "@/lib/profile-fields";
 import { setInstancePrivate } from "@/lib/instance";
+import { DEFAULT_PAGE_SIZE, FEED_PAGE_SIZES } from "@/lib/feed";
 import { COLOR_PATTERN, parseThemeFile, RADIUS_PATTERN } from "@/themes";
 import { isFontKey } from "@/themes/fonts";
 import { COLOR_KEYS, isThemeName } from "@/themes/registry";
@@ -40,6 +43,7 @@ function done(section: string, message = "Saved."): never {
 export type ProfileFormState = { error?: string; notice?: string };
 
 export async function saveProfile(_previous: ProfileFormState, formData: FormData): Promise<ProfileFormState> {
+  await blockInDemo();
   const user = await requireUser();
   const name = text(formData, "name");
   if (!name || name.length > 100) return { error: "Enter a name up to 100 characters." };
@@ -89,6 +93,7 @@ export async function saveProfile(_previous: ProfileFormState, formData: FormDat
 }
 
 export async function saveAppearance(formData: FormData) {
+  await blockInDemo();
   const user = await requireUser("CREATOR");
   const choice = text(formData, "theme");
   const showPoweredBy = formData.get("showPoweredBy") === "on";
@@ -113,6 +118,7 @@ export async function saveAppearance(formData: FormData) {
 
 // A theme file is plain JSON colors, never code: {"name": "Ocean", "colors": {"primary": "#0e7490", ...}}
 export async function uploadTheme(formData: FormData) {
+  await blockInDemo();
   const user = await requireUser("CREATOR");
   const file = formData.get("themeFile");
   if (!(file instanceof File) || file.size === 0) fail("appearance", "Choose a theme file.");
@@ -138,6 +144,7 @@ export async function uploadTheme(formData: FormData) {
 
 // Colour pickers on the Appearance page. Keeps any uploaded CSS or fonts, and replaces only the colours and radius.
 export async function saveCustomColours(formData: FormData) {
+  await blockInDemo();
   const user = await requireUser("CREATOR");
   const colours: Record<string, string> = {};
   for (const key of COLOR_KEYS) {
@@ -158,12 +165,14 @@ export async function saveCustomColours(formData: FormData) {
 }
 
 export async function removeTheme() {
+  await blockInDemo();
   const user = await requireUser("CREATOR");
   await prisma.user.update({ where: { id: user.id }, data: { themeSettings: Prisma.DbNull } });
   done("appearance", "Custom theme removed.");
 }
 
 export async function saveCurrency(formData: FormData) {
+  await blockInDemo();
   const user = await requireUser("CREATOR");
   const currency = text(formData, "currency");
   if (!isSupportedCurrency(currency)) fail("monetization", "Choose a supported currency.");
@@ -172,6 +181,7 @@ export async function saveCurrency(formData: FormData) {
 }
 
 export async function savePayments(formData: FormData) {
+  await blockInDemo();
   const user = await requireUser("CREATOR");
   const enable = formData.get("acceptsPayments") === "on";
   if (enable && (await paymentMode()) === "off") {
@@ -186,7 +196,18 @@ export async function savePayments(formData: FormData) {
 
 const MAX_TIER_DESCRIPTION = 400;
 
+export async function saveFeedPaging(formData: FormData) {
+  await blockInDemo();
+  const user = await requireUser("CREATOR");
+  const feedPaging = text(formData, "feedPaging") === "pages" ? "pages" : "scroll";
+  const size = Number(text(formData, "feedPageSize"));
+  const feedPageSize = (FEED_PAGE_SIZES as readonly number[]).includes(size) ? size : DEFAULT_PAGE_SIZE;
+  await prisma.user.update({ where: { id: user.id }, data: { feedPaging, feedPageSize } });
+  done("feed", "Feed settings saved.");
+}
+
 export async function saveTips(formData: FormData) {
+  await blockInDemo();
   const user = await requireUser("CREATOR");
   const enable = formData.get("tipsEnabled") === "on";
   if (enable && (await paymentMode()) === "off") {
@@ -201,6 +222,7 @@ export async function saveTips(formData: FormData) {
 // Stripe credentials are instance-wide (one Stripe account takes every creator's payments), like the privacy switch.
 export async function saveStripeKeys(formData: FormData) {
   await requireUser("CREATOR");
+  if (isDemoMode()) fail("monetization", DEMO_OFF);
   const secretKey = text(formData, "stripeSecretKey");
   const webhookSecret = text(formData, "stripeWebhookSecret");
   const current = await prisma.instanceSetting.findUnique({ where: { id: "instance" } });
@@ -228,6 +250,7 @@ export async function saveStripeKeys(formData: FormData) {
 
 export async function removeStripeKeys() {
   const user = await requireUser("CREATOR");
+  if (isDemoMode()) fail("monetization", DEMO_OFF);
   if ((await prisma.tier.count({ where: { creatorId: user.id, price: { gt: 0 }, active: true } })) > 0) {
     fail("monetization", "Turn off or delete your paid tiers before removing the Stripe keys.");
   }
@@ -269,6 +292,7 @@ function presentationFields(formData: FormData, path: string) {
 }
 
 export async function createTier(formData: FormData) {
+  await blockInDemo();
   const user = await requireUser("CREATOR");
   const path = returnPath(formData);
   if (!user.acceptsPayments || (await paymentMode()) === "off") {
@@ -289,6 +313,7 @@ export async function createTier(formData: FormData) {
 }
 
 export async function updateTier(formData: FormData) {
+  await blockInDemo();
   const user = await requireUser("CREATOR");
   const path = returnPath(formData);
   const tier = await prisma.tier.findFirst({ where: { id: text(formData, "tierId"), creatorId: user.id } });
@@ -313,6 +338,7 @@ export async function updateTier(formData: FormData) {
 }
 
 export async function setTierActive(formData: FormData) {
+  await blockInDemo();
   const user = await requireUser("CREATOR");
   const tier = await prisma.tier.findFirst({ where: { id: text(formData, "tierId"), creatorId: user.id } });
   if (!tier) fail("/dashboard/tiers", "That tier no longer exists.");
@@ -326,6 +352,7 @@ export async function setTierActive(formData: FormData) {
 }
 
 export async function deleteTier(formData: FormData) {
+  await blockInDemo();
   const user = await requireUser("CREATOR");
   const tier = await prisma.tier.findFirst({ where: { id: text(formData, "tierId"), creatorId: user.id } });
   if (!tier) fail("/dashboard/tiers", "That tier no longer exists.");
@@ -347,6 +374,7 @@ export async function deleteTier(formData: FormData) {
 
 export async function changePassword(formData: FormData) {
   const user = await requireUser();
+  if (isDemoMode()) fail("account", DEMO_OFF);
   const current = String(formData.get("currentPassword") ?? "");
   const next = String(formData.get("newPassword") ?? "");
   const confirm = String(formData.get("confirmPassword") ?? "");
@@ -362,6 +390,8 @@ export async function changePassword(formData: FormData) {
 
 export async function savePrivacy(formData: FormData) {
   const user = await requireUser("CREATOR");
+  // A private demo would lock every visitor out.
+  if (isDemoMode()) fail("privacy", DEMO_OFF);
   await setInstancePrivate(formData.get("isPrivate") === "on");
   const tierId = String(formData.get("dmMinTierId") ?? "");
   const tier = tierId ? await prisma.tier.findFirst({ where: { id: tierId, creatorId: user.id }, select: { id: true } }) : null;
@@ -373,6 +403,7 @@ export async function savePrivacy(formData: FormData) {
 }
 
 export async function saveNotifications(formData: FormData) {
+  await blockInDemo();
   const user = await requireUser();
   const on = (name: string) => formData.get(name) === "on";
   if (user.role === "CREATOR") {

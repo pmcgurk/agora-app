@@ -10,10 +10,10 @@ export default async function CreatorPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ error?: string; notice?: string }>;
+  searchParams: Promise<{ error?: string; notice?: string; q?: string; page?: string }>;
 }) {
   const { id } = await params;
-  const { error, notice } = await searchParams;
+  const { error, notice, q, page } = await searchParams;
   const creator = await getCreator(id);
   if (!creator) notFound();
 
@@ -22,8 +22,10 @@ export default async function CreatorPage({
     const query = new URLSearchParams();
     if (notice) query.set("notice", notice);
     if (error) query.set("error", error);
+    if (q) query.set("q", q);
+    if (page) query.set("page", page);
     redirect(query.size > 0 ? `/?${query}` : "/");
   }
 
-  return <CreatorFeed creator={creator} notice={notice} error={error} />;
+  return <CreatorFeed creator={creator} notice={notice} error={error} q={q} page={page} />;
 }

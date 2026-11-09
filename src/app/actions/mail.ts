@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
+import { DEMO_OFF, isDemoMode } from "@/lib/demo";
 import { getSiteCreator, isInstanceOwner } from "@/lib/instance";
 import { sendMail, verifyMailSettings, type MailSettings } from "@/lib/mail";
 import { testEmail } from "@/lib/email-templates";
@@ -25,6 +26,8 @@ function back(message: string, kind: "notice" | "error" = "notice"): never {
 
 async function requireOwner() {
   const user = await requireUser("CREATOR");
+  // Mail settings point the server at outside hosts, so the demo keeps them locked.
+  if (isDemoMode()) back(DEMO_OFF, "error");
   if (!(await isInstanceOwner(user.id))) redirect("/dashboard");
   return user;
 }

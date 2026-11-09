@@ -1,4 +1,5 @@
 import { cache } from "react";
+import { isDemoMode } from "@/lib/demo";
 import { prisma } from "@/lib/prisma";
 
 export type PaymentMode = "stripe" | "test" | "off";
@@ -15,6 +16,8 @@ export type StripeConfig = {
 
 // Keys saved from the settings panel win over the STRIPE_* environment variables.
 export const getStripeConfig = cache(async (): Promise<StripeConfig> => {
+  // The public demo never talks to Stripe, whatever keys happen to be configured.
+  if (isDemoMode()) return { secretKey: null, webhookSecret: null, source: null };
   const row = await prisma.instanceSetting.findUnique({
     where: { id: "instance" },
     select: { stripeSecretKey: true, stripeWebhookSecret: true },
@@ -40,6 +43,8 @@ export async function stripeConfigured(): Promise<boolean> {
 // Stripe wins when a real key is set. Otherwise paid tiers use the no-money test checkout only
 // while ALLOW_FREE_SUBSCRIPTIONS=true; with neither, only the free tier can be joined.
 export async function paymentMode(): Promise<PaymentMode> {
+  // Demo visitors can "buy" tiers and send tips without any money moving.
+  if (isDemoMode()) return "test";
   if (await stripeConfigured()) return "stripe";
   return process.env.ALLOW_FREE_SUBSCRIPTIONS === "true" ? "test" : "off";
 }

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
+import { isDemoMode } from "@/lib/demo";
 import {
   describeUpload,
   MAX_IMAGE_BYTES,
@@ -15,6 +16,8 @@ import { generatePresignedUploadUrl } from "@/lib/s3";
 export async function POST(request: Request) {
   const user = await getCurrentUser();
   if (!user || user.role !== "CREATOR") return NextResponse.json({ error: "Not allowed." }, { status: 403 });
+  // Uploads would let visitors fill the demo's storage with anything they like.
+  if (isDemoMode()) return NextResponse.json({ error: "Uploads are switched off in the public demo." }, { status: 403 });
   if (!request.headers.get("content-type")?.startsWith("application/json")) {
     return NextResponse.json({ error: "Expected JSON." }, { status: 415 });
   }

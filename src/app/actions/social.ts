@@ -1,5 +1,6 @@
 "use server";
 
+import { blockInDemo } from "@/lib/demo-guard";
 import { revalidatePath } from "next/cache";
 import { canView, getAccessContext } from "@/lib/access";
 import { getCurrentUser } from "@/lib/auth";
@@ -30,6 +31,7 @@ function refresh() {
 }
 
 export async function toggleLike(formData: FormData): Promise<{ liked: boolean; count: number } | null> {
+  await blockInDemo();
   const context = await requireAccess(String(formData.get("postId") ?? ""));
   if (!context) return null;
   const key = { postId_userId: { postId: context.post.id, userId: context.user.id } };
@@ -43,6 +45,7 @@ export async function toggleLike(formData: FormData): Promise<{ liked: boolean; 
 }
 
 export async function toggleCommentLike(formData: FormData): Promise<{ liked: boolean; count: number } | null> {
+  await blockInDemo();
   const comment = await prisma.comment.findUnique({
     where: { id: String(formData.get("commentId") ?? "") },
     select: { id: true, postId: true },
@@ -58,6 +61,7 @@ export async function toggleCommentLike(formData: FormData): Promise<{ liked: bo
 }
 
 export async function addComment(_previous: CommentFormState, formData: FormData): Promise<CommentFormState> {
+  await blockInDemo();
   const body = String(formData.get("body") ?? "").trim();
   const context = await requireAccess(String(formData.get("postId") ?? ""));
   if (!context) return { error: "You need access to this post to comment on it.", body };
@@ -90,6 +94,7 @@ export async function addComment(_previous: CommentFormState, formData: FormData
 
 // Authors can delete their own comments; creators can delete any comment on their posts.
 export async function deleteComment(formData: FormData) {
+  await blockInDemo();
   const user = await getCurrentUser();
   if (!user) return;
   const comment = await prisma.comment.findUnique({

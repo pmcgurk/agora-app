@@ -18,17 +18,17 @@ export const dynamic = "force-dynamic";
 export default async function Home({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; notice?: string }>;
+  searchParams: Promise<{ error?: string; notice?: string; q?: string; page?: string }>;
 }) {
   if (await needsSetup()) redirect("/setup");
   await requireInstanceAccess();
   const siteCreator = await getSiteCreator();
   // With a single creator the root is their feed.
   if (siteCreator) {
-    const { error, notice } = await searchParams;
+    const { error, notice, q, page } = await searchParams;
     return (
       <CreatorShell creator={siteCreator} homeHref="/">
-        <CreatorFeed creator={siteCreator} notice={notice} error={error} />
+        <CreatorFeed creator={siteCreator} notice={notice} error={error} q={q} page={page} />
       </CreatorShell>
     );
   }

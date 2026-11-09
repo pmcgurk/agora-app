@@ -23,7 +23,14 @@ for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
       await client.send(new HeadBucketCommand({ Bucket: MINIO_BUCKET }));
       console.log(`Bucket "${MINIO_BUCKET}" already exists.`);
     } catch (error) {
-      if (error?.$metadata?.httpStatusCode !== 404) throw error;
+      const status = error?.$metadata?.httpStatusCode;
+      // Hosted storage often gives the app a key that can read and write one bucket but not inspect or
+      // create buckets. A 403 means the bucket is there and managed elsewhere, so carry on.
+      if (status === 403) {
+        console.log(`Cannot inspect bucket "${MINIO_BUCKET}" (access denied). Assuming it exists.`);
+        process.exit(0);
+      }
+      if (status !== 404) throw error;
       await client.send(new CreateBucketCommand({ Bucket: MINIO_BUCKET }));
       console.log(`Created bucket "${MINIO_BUCKET}".`);
     }

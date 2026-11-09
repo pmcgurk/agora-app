@@ -4,6 +4,7 @@ import Flash from "@/components/Flash";
 import Logo from "@/components/Logo";
 import WizardSteps from "@/components/WizardSteps";
 import { buttonClass, cardClass, inputClass } from "@/components/ui";
+import { isDemoMode } from "@/lib/demo";
 import { needsSetup } from "@/lib/instance";
 import { WIZARD_STEPS } from "@/lib/profile-fields";
 
@@ -14,7 +15,8 @@ export default async function SetupPage({
 }: {
   searchParams: Promise<{ error?: string }>;
 }) {
-  if (!(await needsSetup())) redirect("/login");
+  const demo = isDemoMode();
+  if (!demo && !(await needsSetup())) redirect("/login");
   const { error } = await searchParams;
   return (
     <main className="mx-auto max-w-md space-y-6 px-4 py-14">
@@ -26,6 +28,12 @@ export default async function SetupPage({
           <p className="text-muted">Create the owner account for this site. It takes about a minute.</p>
         </header>
         <Flash error={error} />
+        {demo && (
+          <p role="note" className="rounded-theme bg-secondary p-3 text-sm">
+            <strong>Demo.</strong> This is the real first screen of a new Agora site. Type anything you like: nothing is
+            saved, and you&apos;ll be signed in as the fictional demo creator for the next steps.
+          </p>
+        )}
         <form action={setupInstance} className="space-y-3">
           <label className="block">
             Your name

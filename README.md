@@ -16,8 +16,8 @@ and presentation kept in the hands of each creator.
 ## Quick start
 
 ```sh
-git clone https://github.com/pmcgurk/agora.git
-cd agora
+git clone https://github.com/pmcgurk/agora-app.git
+cd agora-app
 docker compose up -d
 ```
 
@@ -28,7 +28,8 @@ Docker volumes. The first start builds the image and takes a few minutes.
 
 To try it with demo data, run `SEED_DEMO_DATA=true docker compose up -d` and log
 in as `demo@agora.local` (creator) or `patron@agora.local` (patron) with the
-password `demo-password`. Never seed a public instance.
+password `demo-password`. Never seed a public instance. For a richer showcase
+with a replayable setup wizard, see [Public demo mode](#public-demo-mode).
 
 ## Configuration
 
@@ -50,6 +51,28 @@ machine, copy `.env.example` to `.env` and:
 - put Agora behind an HTTPS reverse proxy. With an `https://` `NEXT_PUBLIC_BASE_URL`
   the container refuses to start with the default development passwords, and
   MinIO's admin console (port 9001) is only published on `127.0.0.1`.
+
+## Public demo mode
+
+Set `DEMO_MODE=true` to turn an instance into a showcase you can leave open to the public (for example at a
+demo address on your own domain):
+
+- a fictional ceramics creator, Maya, with three tiers, nine posts (images, a video, locked posts), comments
+  and analytics, created when the server starts;
+- a `/demo` page where visitors choose how to look around: **as a new creator** (the full setup wizard, which
+  can be replayed any number of times and saves nothing), **as a supporter** on a paid tier, or **as a signed-out
+  visitor**;
+- the whole database is wiped and re-seeded every `DEMO_RESET_MINUTES` (default 60);
+- the demo is **read-only**: visitors can look at everything, but posting, commenting, liking, tipping,
+  subscribing, uploading and every settings change are switched off (a banner explains why), and Stripe is
+  never contacted. Only the setup wizard, which saves nothing, and the waitlist can be used;
+- an optional waitlist form for a hosted version of Agora. Set `WAITLIST_EMAIL` to the address that should hear
+  about sign-ups. They are also saved in the database and survive resets. Without `WAITLIST_EMAIL` the form
+  is hidden.
+
+**Demo mode deletes the database it runs on. Never enable it on a real site.** To run it locally:
+`DEMO_MODE=true docker compose up -d`. To host it, follow [Run the demo on Render](docs/deploy-render.md), which
+comes with a ready-made [`render.yaml`](render.yaml).
 
 ## Payments with Stripe
 
@@ -198,6 +221,11 @@ Every demo account uses the password `demo-password`.
 - One creator workspace: Overview, Posts, Members, Tiers and Analytics, then Settings (Profile,
   Appearance, Payments, Notifications, Privacy, Account), with rarely used technical pages (Email, API
   keys, Webhooks, API docs) under a collapsed "Advanced" group.
+- Feeds load five posts at a time (3, 5, 10 or 20) with infinite scrolling, or Newer/Older pages, as the
+  creator picks in Settings → Advanced → Feed. A "Load new posts" button appears on an open page when the
+  creator publishes something new (checked every 30 seconds while the tab is visible). Long posts are clipped with a fade and a "View full post" link.
+- Patrons can search a creator's posts. Titles are always searched; post text only in posts the
+  searcher can open, so a search never reveals what is inside a locked post.
 - Creators see an "Edit post" button on their own posts, in the feed and on the post page.
 - Custom thank-you messages: one per tier (shown after someone joins) and one for tips (Settings → Payments).
 - The setup wizard walks through connecting Stripe (API key, webhook, payouts) if it isn't connected yet.

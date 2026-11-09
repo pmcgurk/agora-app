@@ -1,8 +1,10 @@
 "use server";
 
+import { blockInDemo } from "@/lib/demo-guard";
 import { redirect } from "next/navigation";
 import { createApiKey } from "@/lib/api-keys";
 import { requireUser } from "@/lib/auth";
+import { DEMO_OFF, isDemoMode } from "@/lib/demo";
 import { prisma } from "@/lib/prisma";
 import { deliver, isWebhookEvent, newWebhookSecret, parseWebhookUrl, WEBHOOK_EVENTS } from "@/lib/webhooks";
 
@@ -13,6 +15,7 @@ export type ApiKeyState = { key?: string; error?: string };
 
 export async function generateApiKey(_previous: ApiKeyState, formData: FormData): Promise<ApiKeyState> {
   const user = await requireUser("CREATOR");
+  if (isDemoMode()) return { error: DEMO_OFF };
   const name = String(formData.get("name") ?? "").trim();
   if (!name || name.length > 60) return { error: "Name the key (up to 60 characters)." };
   if ((await prisma.apiKey.count({ where: { userId: user.id } })) >= MAX_KEYS) {
@@ -22,6 +25,7 @@ export async function generateApiKey(_previous: ApiKeyState, formData: FormData)
 }
 
 export async function revokeApiKey(formData: FormData) {
+  await blockInDemo();
   const user = await requireUser("CREATOR");
   await prisma.apiKey.deleteMany({ where: { id: String(formData.get("keyId") ?? ""), userId: user.id } });
   redirect("/settings/api-keys?notice=Key+revoked.");
@@ -33,6 +37,8 @@ function back(kind: "notice" | "error", message: string): never {
 
 export async function createWebhook(formData: FormData) {
   const user = await requireUser("CREATOR");
+  // Webhooks make the server call outside addresses, so the demo keeps them locked.
+  if (isDemoMode()) back("error", DEMO_OFF);
   const url = parseWebhookUrl(String(formData.get("url") ?? "").trim());
   if (!url) back("error", "Enter a valid http(s) URL.");
   const events = formData.getAll("events").map(String).filter(isWebhookEvent);
@@ -45,6 +51,7 @@ export async function createWebhook(formData: FormData) {
 }
 
 export async function toggleWebhook(formData: FormData) {
+  await blockInDemo();
   const user = await requireUser("CREATOR");
   const hook = await prisma.webhook.findFirst({ where: { id: String(formData.get("webhookId") ?? ""), userId: user.id } });
   if (hook) await prisma.webhook.update({ where: { id: hook.id }, data: { enabled: !hook.enabled } });
@@ -52,6 +59,7 @@ export async function toggleWebhook(formData: FormData) {
 }
 
 export async function deleteWebhook(formData: FormData) {
+  await blockInDemo();
   const user = await requireUser("CREATOR");
   await prisma.webhook.deleteMany({ where: { id: String(formData.get("webhookId") ?? ""), userId: user.id } });
   back("notice", "Webhook deleted.");
@@ -59,6 +67,7 @@ export async function deleteWebhook(formData: FormData) {
 
 export async function testWebhook(formData: FormData) {
   const user = await requireUser("CREATOR");
+  if (isDemoMode()) back("error", DEMO_OFF);
   const hook = await prisma.webhook.findFirst({ where: { id: String(formData.get("webhookId") ?? ""), userId: user.id } });
   if (!hook) back("error", "Webhook not found.");
   const result = await deliver(hook, "ping", { message: "Test event from Agora", events: WEBHOOK_EVENTS.map((event) => event.key) });

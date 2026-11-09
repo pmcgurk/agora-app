@@ -31,6 +31,7 @@ export default async function CreatorWorkspace({ userId, children }: { userId: s
       title: "Advanced",
       collapsible: true,
       links: [
+        { href: "/settings/feed", label: "Feed" },
         ...(owner ? [{ href: "/settings/email", label: "Email" }] : []),
         { href: "/settings/api-keys", label: "API keys" },
         { href: "/settings/webhooks", label: "Webhooks" },

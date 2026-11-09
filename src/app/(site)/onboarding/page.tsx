@@ -6,6 +6,7 @@ import WizardSteps from "@/components/WizardSteps";
 import { buttonClass, cardClass, inputClass, secondaryButtonClass } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
 import { CURRENCIES } from "@/lib/currency";
+import { isDemoMode } from "@/lib/demo";
 import { paymentMode } from "@/lib/payments";
 import { publicUrl } from "@/lib/urls";
 import { WIZARD_STEPS } from "@/lib/profile-fields";
@@ -18,20 +19,29 @@ export default async function OnboardingPage({
   searchParams: Promise<{ error?: string; notice?: string; step?: string }>;
 }) {
   const user = await requireUser("CREATOR");
-  if (user.onboardedAt) redirect("/dashboard");
+  const demo = isDemoMode();
+  // The demo replays the wizard for every visitor, even though its creator is already set up.
+  if (user.onboardedAt && !demo) redirect("/dashboard");
   const { error, notice, step } = await searchParams;
   const payments = step === "payments";
+  // A demo wizard starts from blank fields, like a brand-new site would.
+  const person = demo ? { name: "", tagline: null, bio: null } : user;
 
   return (
     <main className="mx-auto max-w-xl space-y-6 px-4 py-10">
       <h1 className="text-center"><Logo className="text-4xl" /></h1>
       <WizardSteps steps={WIZARD_STEPS} current={payments ? 2 : 1} />
       <section className={`${cardClass} space-y-4`}>
+        {demo && (
+          <p role="note" className="rounded-theme bg-secondary p-3 text-sm">
+            <strong>Demo.</strong> Nothing you enter in this wizard is saved.
+          </p>
+        )}
         <Flash error={error} notice={notice} />
         {payments ? (
-          <PaymentsStep currency={user.currency} />
+          <PaymentsStep currency={user.currency} demo={demo} />
         ) : (
-          <ProfileStep user={user} />
+          <ProfileStep user={person} />
         )}
         <form action={skipOnboarding}>
           <button className="text-sm text-muted underline">Skip setup for now</button>
@@ -71,8 +81,9 @@ function ProfileStep({
   );
 }
 
-async function PaymentsStep({ currency }: { currency: string }) {
-  const available = (await paymentMode()) !== "off";
+async function PaymentsStep({ currency, demo }: { currency: string; demo: boolean }) {
+  // The demo shows the not-connected-yet view, so visitors see the Stripe tutorial.
+  const available = !demo && (await paymentMode()) !== "off";
   return (
     <>
       <header>
@@ -123,12 +134,12 @@ async function PaymentsStep({ currency }: { currency: string }) {
           <button className={buttonClass}>Finish setup</button>
         </div>
       </form>
-      {!available && <StripeGuide />}
+      {!available && <StripeGuide demo={demo} />}
     </>
   );
 }
 
-function StripeGuide() {
+function StripeGuide({ demo }: { demo: boolean }) {
   const webhook = publicUrl("/api/stripe/webhook");
   return (
     <details className="rounded-theme border border-line p-4" open>
@@ -155,13 +166,18 @@ function StripeGuide() {
           <li>Paste both below. When you are ready for real money, switch Stripe to live mode and replace the keys in Settings &rarr; Payments. Set up your bank details under Stripe &rarr; Settings &rarr; Payouts.</li>
         </ol>
         <form action={saveOnboardingStripe} className="space-y-3">
+          {demo && (
+            <p role="note" className="rounded-theme bg-secondary p-3">
+              <strong>Demo.</strong> Don&apos;t paste a real key here. These made-up values are only for show, and nothing is saved.
+            </p>
+          )}
           <label className="block">
             Secret key
-            <input name="stripeSecretKey" type="password" autoComplete="off" placeholder="sk_test_…" required className={inputClass} />
+            <input name="stripeSecretKey" type={demo ? "text" : "password"} autoComplete="off" placeholder="sk_test_…" defaultValue={demo ? "sk_test_demo12345678" : undefined} required className={inputClass} />
           </label>
           <label className="block">
             Webhook signing secret
-            <input name="stripeWebhookSecret" type="password" autoComplete="off" placeholder="whsec_…" className={inputClass} />
+            <input name="stripeWebhookSecret" type={demo ? "text" : "password"} autoComplete="off" placeholder="whsec_…" defaultValue={demo ? "whsec_demo12345678" : undefined} className={inputClass} />
           </label>
           <button className={secondaryButtonClass}>Save Stripe keys</button>
         </form>

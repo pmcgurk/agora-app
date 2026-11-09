@@ -3,7 +3,7 @@
 ## Reporting a vulnerability
 
 Please do not open a public issue for security problems. Use GitHub's
-[private vulnerability reporting](https://github.com/pmcgurk/agora/security/advisories/new)
+[private vulnerability reporting](https://github.com/pmcgurk/agora-app/security/advisories/new)
 for this repository. Include steps to reproduce and the version or commit you tested.
 You should get a reply within a few days.
 

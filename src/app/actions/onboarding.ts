@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { createSession, requireUser } from "@/lib/auth";
 import { isSupportedCurrency } from "@/lib/currency";
+import { DEMO_CREATOR_EMAIL, isDemoMode } from "@/lib/demo";
 import { hashPassword } from "@/lib/password";
 import { paymentMode, STRIPE_KEY_PATTERN, STRIPE_WEBHOOK_SECRET_PATTERN } from "@/lib/payments";
 import { prisma } from "@/lib/prisma";
@@ -21,9 +22,12 @@ function failAt(path: string, message: string): never {
 }
 
 // Step 1 of a fresh install: creates the owner's creator account. Only works while no creator exists.
+// The public demo replays this step for every visitor: it checks the form like the real thing, then
+// signs them in as the fictional creator instead of creating anyone.
 export async function setupInstance(formData: FormData) {
-  if (await prisma.user.findFirst({ where: { role: "CREATOR" }, select: { id: true } })) redirect("/login");
-  if (!withinLimit(`setup:${await clientIp()}`, 10, 60 * 60 * 1000)) failAt("/setup", "Too many attempts. Try again later.");
+  const demo = isDemoMode();
+  if (!demo && (await prisma.user.findFirst({ where: { role: "CREATOR" }, select: { id: true } }))) redirect("/login");
+  if (!withinLimit(`setup:${await clientIp()}`, demo ? 60 : 10, 60 * 60 * 1000)) failAt("/setup", "Too many attempts. Try again later.");
 
   const name = text(formData, "name");
   const email = text(formData, "email").toLowerCase();
@@ -32,6 +36,12 @@ export async function setupInstance(formData: FormData) {
   if (!EMAIL_PATTERN.test(email) || email.length > 254) failAt("/setup", "Enter a valid email address.");
   if (password.length < MIN_PASSWORD_LENGTH || password.length > 200) {
     failAt("/setup", `Password must be ${MIN_PASSWORD_LENGTH}-200 characters.`);
+  }
+  if (demo) {
+    const maya = await prisma.user.findUnique({ where: { email: DEMO_CREATOR_EMAIL }, select: { id: true } });
+    if (!maya) failAt("/setup", "The demo is resetting. Try again in a few seconds.");
+    await createSession(maya.id);
+    redirect("/onboarding");
   }
   if (await prisma.user.findUnique({ where: { email }, select: { id: true } })) failAt("/setup", "That email is already registered.");
 
@@ -57,12 +67,16 @@ export async function setupInstance(formData: FormData) {
 
 async function requireOnboarding() {
   const user = await requireUser("CREATOR");
-  if (user.onboardedAt) redirect("/dashboard");
+  // In the demo the wizard can be replayed any time; its steps save nothing.
+  if (user.onboardedAt && !isDemoMode()) redirect("/dashboard");
   return user;
 }
 
+const DEMO_FINISHED = "That's the end of the wizard. Nothing was saved. This is the demo creator's dashboard.";
+
 export async function skipOnboarding() {
   const user = await requireOnboarding();
+  if (isDemoMode()) redirect("/dashboard?notice=" + encodeURIComponent(DEMO_FINISHED));
   await prisma.user.update({ where: { id: user.id }, data: { onboardedAt: new Date() } });
   redirect("/dashboard");
 }
@@ -79,10 +93,12 @@ export async function saveOnboardingProfile(formData: FormData) {
   if (tagline.length > 120) failAt(path, "The tagline can be up to 120 characters.");
   if (bio.length > 2000) failAt(path, "The about text can be up to 2000 characters.");
 
-  await prisma.user.update({
-    where: { id: user.id },
-    data: { name, tagline: tagline || null, bio: bio || null },
-  });
+  if (!isDemoMode()) {
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { name, tagline: tagline || null, bio: bio || null },
+    });
+  }
 
   redirect("/onboarding?step=payments");
 }
@@ -97,6 +113,8 @@ export async function saveOnboardingStripe(formData: FormData) {
     failAt(path, "That doesn't look like a Stripe secret key. It should start with sk_test_ or sk_live_ (or rk_ for a restricted key).");
   }
   if (webhookSecret && !STRIPE_WEBHOOK_SECRET_PATTERN.test(webhookSecret)) failAt(path, "The webhook signing secret should start with whsec_.");
+  // The demo checks the keys like the real thing but never stores them.
+  if (isDemoMode()) redirect(`${path}&notice=${encodeURIComponent("Demo: in a real site that connects Stripe. Nothing was saved.")}`);
   const data = { stripeSecretKey: secretKey, ...(webhookSecret ? { stripeWebhookSecret: webhookSecret } : {}) };
   await prisma.instanceSetting.upsert({ where: { id: "instance" }, update: data, create: { id: "instance", ...data } });
   redirect(`${path}&notice=${encodeURIComponent("Stripe connected.")}`);
@@ -109,6 +127,8 @@ export async function finishOnboarding(formData: FormData) {
   const acceptsPayments = formData.get("acceptsPayments") === "on";
   const currency = text(formData, "currency") || user.currency;
   if (!isSupportedCurrency(currency)) failAt("/onboarding", "Choose a supported currency.");
+
+  if (isDemoMode()) redirect("/dashboard?notice=" + encodeURIComponent(DEMO_FINISHED));
 
   let tier: { name: string; price: number; description: string | null } | null = null;
   if (acceptsPayments) {

@@ -1,13 +1,13 @@
 import EndPlan from "@/components/EndPlan";
 import Link from "next/link";
 import { after } from "next/server";
-import FeedMedia, { type FeedItem } from "@/components/FeedMedia";
-import LikeButton from "@/components/LikeButton";
-import Markdown from "@/components/Markdown";
-import ShareButton from "@/components/ShareButton";
 import Flash from "@/components/Flash";
-import { cardClass, linkClass } from "@/components/ui";
-import { activeSubscriptionWhere, canView, getAccessContext } from "@/lib/access";
+import InfinitePosts from "@/components/InfinitePosts";
+import PostArticles from "@/components/PostArticles";
+import { cardClass, inputClass, linkClass, secondaryButtonClass } from "@/components/ui";
+import { activeSubscriptionWhere, getAccessContext } from "@/lib/access";
+import NewPostsBanner from "@/components/NewPostsBanner";
+import { cleanSearch, fetchPosts, MAX_SEARCH_LENGTH, pageSizeOf } from "@/lib/feed";
 import { patronCanMessage } from "@/lib/dm";
 import { getCurrentUser } from "@/lib/auth";
 import { creatorPath, getCreator, supportPath } from "@/lib/creator";
@@ -20,30 +20,25 @@ export default async function CreatorFeed({
   creator,
   notice,
   error,
+  q,
+  page,
 }: {
   creator: Creator;
   notice?: string;
   error?: string;
+  q?: string;
+  page?: string;
 }) {
   const viewer = await getCurrentUser();
   const access = await getAccessContext(creator.id, viewer);
   if (!access.isOwner) after(() => recordProfileView(creator.id));
 
-  const [tiers, posts, subscriptions] = await Promise.all([
+  const query = cleanSearch(q);
+  const pageNumber = Math.max(1, Number.parseInt(page ?? "1", 10) || 1);
+  const paged = creator.feedPaging === "pages";
+  const [tiers, feed, subscriptions] = await Promise.all([
     prisma.tier.findMany({ where: { creatorId: creator.id }, orderBy: { price: "asc" } }),
-    prisma.post.findMany({
-      where: { creatorId: creator.id },
-      orderBy: { createdAt: "desc" },
-      include: {
-        minTier: { select: { name: true, price: true } },
-        media: {
-          where: { inline: false },
-          orderBy: { position: "asc" },
-          select: { id: true, kind: true, fileName: true, size: true, blurObjectKey: true, previewObjectKey: true, thumbBlurObjectKey: true },
-        },
-        _count: { select: { likes: true, comments: true, media: { where: { inline: false } } } },
-      },
-    }),
+    fetchPosts({ creatorId: creator.id, access, q: query, pageSize: pageSizeOf(creator), ...(paged ? { page: pageNumber } : {}) }),
     viewer
       ? prisma.subscription.findMany({
           where: { patronId: viewer.id, tier: { creatorId: creator.id }, ...activeSubscriptionWhere() },
@@ -51,11 +46,13 @@ export default async function CreatorFeed({
         })
       : [],
   ]);
-  const liked = new Set(
-    viewer
-      ? (await prisma.postLike.findMany({ where: { userId: viewer.id, postId: { in: posts.map((post) => post.id) } }, select: { postId: true } })).map((like) => like.postId)
-      : [],
-  );
+  const { posts } = feed;
+  const pageLink = (target: number) => {
+    const params = new URLSearchParams();
+    if (query) params.set("q", query);
+    if (target > 1) params.set("page", String(target));
+    return params.size ? `?${params}` : "?";
+  };
   const memberTier =
     tiers.filter((tier) => subscriptions.some((subscription) => subscription.tierId === tier.id)).at(-1) ?? null;
   const memberPlan = subscriptions.find((subscription) => subscription.tierId === memberTier?.id) ?? null;
@@ -90,63 +87,42 @@ export default async function CreatorFeed({
         </section>
       )}
 
+      {(posts.length > 0 || query) && (
+        <form role="search" className="flex gap-2">
+          <input
+            type="search"
+            name="q"
+            defaultValue={query}
+            maxLength={MAX_SEARCH_LENGTH}
+            placeholder="Search posts"
+            aria-label="Search posts"
+            className={`${inputClass} !mt-0`}
+          />
+          <button className={secondaryButtonClass}>Search</button>
+        </form>
+      )}
+      {query && (
+        <p className="text-sm text-muted">
+          {posts.length === 0 ? "No posts match" : "Showing posts matching"} “{query}”.{" "}
+          <Link href="?" className={linkClass}>Clear search</Link>
+        </p>
+      )}
+
+      {!query && pageNumber === 1 && <NewPostsBanner key={posts[0]?.id ?? "none"} creatorId={creator.id} since={posts[0]?.createdAt.toISOString() ?? new Date().toISOString()} />}
+
       <section aria-label="Posts" className="space-y-4">
-        {posts.map((post) => {
-          const unlocked = canView(post, access);
-          const items: FeedItem[] = post.media.map((item) => ({
-            id: item.id,
-            kind: item.kind,
-            fileName: item.fileName,
-            size: Number(item.size),
-            canBlur: post.allowBlurPreview && item.blurObjectKey !== null,
-            previewSeconds: item.previewObjectKey ? post.previewSeconds : null,
-            hasThumbnail: item.thumbBlurObjectKey !== null,
-          }));
-          return (
-            <article key={post.id} className={`${cardClass} agora-post`}>
-              <h2 className="text-xl font-semibold">
-                <Link href={`${base}/posts/${post.id}`}>{post.title}</Link>
-              </h2>
-              <p className="text-xs text-muted">
-                {post.createdAt.toISOString().slice(0, 10)}
-                {!post.isPublic && ` · ${post.minTier ? `${post.minTier.name}+` : "private"}`}
-                {unlocked ? "" : " · locked"}
-              </p>
-              {unlocked && post.textContent && (
-                <Markdown source={post.textContent} className="mt-2" />
-              )}
-              <FeedMedia items={items} unlocked={unlocked} />
-              <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-muted">
-                {unlocked && !access.blocked && (
-                  <LikeButton
-                    postId={post.id}
-                    initialLiked={liked.has(post.id)}
-                    initialCount={post._count.likes}
-                    mode={viewer ? "ok" : "login"}
-                  />
-                )}
-                <Link
-                  href={`${base}/posts/${post.id}#comments`}
-                  className="agora-comments-link inline-flex items-center gap-1.5 rounded-full border border-line px-3 py-1 hover:border-primary hover:text-primary"
-                >
-                  <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"><path d="M21 12a8 8 0 0 1-11.8 7L3 20.5l1.5-5.2A8 8 0 1 1 21 12z" /></svg>
-                  {post._count.comments}
-                </Link>
-                <ShareButton path={`${base}/posts/${post.id}`} title={post.title} />
-                {access.isOwner && (
-                  <Link href={`/dashboard/posts/${post.id}/edit`} className="rounded-full border border-line px-3 py-1 hover:border-primary hover:text-primary">
-                    Edit post
-                  </Link>
-                )}
-                <Link href={`${base}/posts/${post.id}`} className={`${linkClass} ml-auto`}>
-                  {unlocked ? "View full post" : "View teaser"}
-                </Link>
-              </div>
-            </article>
-          );
-        })}
-        {posts.length === 0 && <p className="text-muted">No posts yet.</p>}
+        <PostArticles creator={creator} posts={posts} />
+        {!paged && feed.nextCursor && <InfinitePosts key={`${query}:${posts[0]?.id}`} creatorId={creator.id} q={query} initialCursor={feed.nextCursor} />}
+        {posts.length === 0 && !query && <p className="text-muted">No posts yet.</p>}
       </section>
+
+      {paged && (pageNumber > 1 || feed.hasMore) && (
+        <nav aria-label="Pages" className="flex items-center justify-between text-sm">
+          {pageNumber > 1 ? <Link href={pageLink(pageNumber - 1)} className={linkClass}>← Newer posts</Link> : <span />}
+          <span className="text-muted">Page {pageNumber}</span>
+          {feed.hasMore ? <Link href={pageLink(pageNumber + 1)} className={linkClass}>Older posts →</Link> : <span />}
+        </nav>
+      )}
     </>
   );
 }

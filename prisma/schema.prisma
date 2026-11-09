@@ -57,6 +57,10 @@ model User {
   tipsEnabled      Boolean          @default(false)
   // Shown to someone right after they leave a tip.
   tipThanks        String?
+  // How the feed loads more posts: "scroll" (infinite scrolling) or "pages".
+  feedPaging       String           @default("scroll")
+  // Posts per scroll batch or page.
+  feedPageSize     Int              @default(5)
   showPoweredBy    Boolean          @default(true)
   // Google Font choices (keys from src/themes/fonts.ts); null keeps the theme's font.
   fontBody         String?
@@ -434,4 +438,12 @@ model CreatorApplication {
   decidedAt    DateTime?
 
   @@index([status, createdAt])
+}
+
+// People who asked to be told when hosted Agora opens. Only the public demo collects these, and
+// its hourly reset leaves this table alone.
+model WaitlistEntry {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  createdAt DateTime @default(now())
 }
