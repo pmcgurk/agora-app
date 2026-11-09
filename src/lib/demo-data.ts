@@ -107,8 +107,9 @@ export async function writeDemoData(db: Prisma.TransactionClient, assets: DemoAs
       fontHeading: "playfair-display",
       fontBody: "dm-sans",
       socialLinks: {
-        youtube: "https://www.youtube.com/@mayamakes",
-        instagram: "https://www.instagram.com/mayamakes",
+        // Checked in November 2026: neither handle exists on YouTube or Instagram.
+        youtube: "https://www.youtube.com/@mayaokaforstudiodemo",
+        instagram: "https://www.instagram.com/mayaokaforstudiodemo",
       },
     },
   });
