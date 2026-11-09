@@ -3,6 +3,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createSession, requireUser } from "@/lib/auth";
+import { DEMO_OFF, isDemoMode } from "@/lib/demo";
 import { applicationApprovedEmail, applicationReceivedEmail, applicationRejectedEmail, invitationEmail } from "@/lib/email-templates";
 import { createCreatorInvite, findOpenInvite, INVITE_COOKIE } from "@/lib/invites";
 import { getCreatorSettings, getInstanceSettings, isInstanceOwner, setMultiCreator, siteName, type CreatorSignup } from "@/lib/instance";
@@ -36,6 +37,7 @@ function done(path: string, message: string): never {
 
 // Only the owner manages other creators.
 async function requireOwner() {
+  if (isDemoMode()) fail(CREATORS, DEMO_OFF);
   const user = await requireUser("CREATOR");
   if (!(await isInstanceOwner(user.id))) redirect("/dashboard");
   return user;
@@ -155,6 +157,7 @@ export async function setCreatorPage(formData: FormData) {
 // Open sign-up: anyone can create a creator account, with their own page name.
 export async function signupCreator(formData: FormData) {
   const path = "/signup?as=creator";
+  if (isDemoMode()) fail(path, DEMO_OFF);
   const settings = await getCreatorSettings();
   if (!settings.multiCreator || settings.signup !== "OPEN") fail("/signup", "Creator sign-up is closed on this site.");
   if (!withinLimit(`creator-signup:${await clientIp()}`, 10, 60 * 60 * 1000)) fail(path, "Too many attempts. Try again later.");
@@ -177,6 +180,7 @@ export async function signupCreator(formData: FormData) {
 // Approval: anyone can apply; nothing is created until the owner approves.
 export async function applyForCreator(formData: FormData) {
   const path = "/apply";
+  if (isDemoMode()) fail(path, DEMO_OFF);
   const settings = await getCreatorSettings();
   if (!settings.multiCreator || settings.signup !== "APPROVAL") fail("/signup", "Applications are closed on this site.");
   if (!withinLimit(`apply:${await clientIp()}`, 5, 60 * 60 * 1000)) fail(path, "Too many applications from this network. Try again later.");
@@ -248,6 +252,7 @@ export async function decideApplication(formData: FormData) {
 export async function acceptInvite(formData: FormData) {
   const token = text(formData, "token");
   const path = `/invite/${encodeURIComponent(token)}`;
+  if (isDemoMode()) fail(path, DEMO_OFF);
   if (!withinLimit(`invite:${await clientIp()}`, 10, 60 * 60 * 1000)) fail(path, "Too many attempts. Try again later.");
 
   const invite = await findOpenInvite(token);

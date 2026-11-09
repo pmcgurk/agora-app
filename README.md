@@ -16,8 +16,8 @@ and presentation kept in the hands of each creator.
 ## Quick start
 
 ```sh
-git clone https://github.com/pmcgurk/agora.git
-cd agora
+git clone https://github.com/pmcgurk/agora-app.git
+cd agora-app
 docker compose up -d
 ```
 
@@ -28,7 +28,8 @@ Docker volumes. The first start builds the image and takes a few minutes.
 
 To try it with demo data, run `SEED_DEMO_DATA=true docker compose up -d` and log
 in as `demo@agora.local` (creator) or `patron@agora.local` (patron) with the
-password `demo-password`. Never seed a public instance.
+password `demo-password`. Never seed a public instance. For a richer showcase
+with a replayable setup wizard, see [Public demo mode](#public-demo-mode).
 
 ## Configuration
 
@@ -50,6 +51,28 @@ machine, copy `.env.example` to `.env` and:
 - put Agora behind an HTTPS reverse proxy. With an `https://` `NEXT_PUBLIC_BASE_URL`
   the container refuses to start with the default development passwords, and
   MinIO's admin console (port 9001) is only published on `127.0.0.1`.
+
+## Public demo mode
+
+Set `DEMO_MODE=true` to turn an instance into a showcase you can leave open to the public (for example at a
+demo address on your own domain):
+
+- a fictional ceramics creator, Maya, with three tiers, nine posts (images, a video, locked posts), comments
+  and analytics, created when the server starts;
+- a `/demo` page where visitors choose how to look around: **as a new creator** (the full setup wizard, which
+  can be replayed any number of times and saves nothing), **as a supporter** on a paid tier, or **as a signed-out
+  visitor**;
+- the whole database is wiped and re-seeded every `DEMO_RESET_MINUTES` (default 60);
+- anything that reaches outside the server or could hurt other visitors is switched off: uploads, email
+  settings, webhooks, API keys, Stripe keys (Stripe is never contacted), password changes and creating other
+  creators. Tips and tier purchases use the no-money test checkout;
+- an optional waitlist form for a hosted version of Agora. Set `WAITLIST_EMAIL` to the address that should hear
+  about sign-ups. They are also saved in the database and survive resets. Without `WAITLIST_EMAIL` the form
+  is hidden.
+
+**Demo mode deletes the database it runs on. Never enable it on a real site.** To run it locally:
+`DEMO_MODE=true docker compose up -d`. To host it, follow [Run the demo on Render](docs/deploy-render.md), which
+comes with a ready-made [`render.yaml`](render.yaml).
 
 ## Payments with Stripe
 

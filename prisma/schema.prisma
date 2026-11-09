@@ -439,3 +439,11 @@ model CreatorApplication {
 
   @@index([status, createdAt])
 }
+
+// People who asked to be told when hosted Agora opens. Only the public demo collects these, and
+// its hourly reset leaves this table alone.
+model WaitlistEntry {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  createdAt DateTime @default(now())
+}

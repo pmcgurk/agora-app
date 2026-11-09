@@ -7,6 +7,7 @@ import { activeSubscriptionWhere } from "@/lib/access";
 import { getStripe } from "@/lib/stripe";
 import { normalizeSocialLink, SOCIAL_PLATFORMS } from "@/lib/social-links";
 import { isSupportedCurrency } from "@/lib/currency";
+import { DEMO_OFF, isDemoMode } from "@/lib/demo";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { paymentMode, STRIPE_KEY_PATTERN, STRIPE_WEBHOOK_SECRET_PATTERN, stripeConfigured } from "@/lib/payments";
 import { prisma } from "@/lib/prisma";
@@ -211,6 +212,7 @@ export async function saveTips(formData: FormData) {
 // Stripe credentials are instance-wide (one Stripe account takes every creator's payments), like the privacy switch.
 export async function saveStripeKeys(formData: FormData) {
   await requireUser("CREATOR");
+  if (isDemoMode()) fail("monetization", DEMO_OFF);
   const secretKey = text(formData, "stripeSecretKey");
   const webhookSecret = text(formData, "stripeWebhookSecret");
   const current = await prisma.instanceSetting.findUnique({ where: { id: "instance" } });
@@ -238,6 +240,7 @@ export async function saveStripeKeys(formData: FormData) {
 
 export async function removeStripeKeys() {
   const user = await requireUser("CREATOR");
+  if (isDemoMode()) fail("monetization", DEMO_OFF);
   if ((await prisma.tier.count({ where: { creatorId: user.id, price: { gt: 0 }, active: true } })) > 0) {
     fail("monetization", "Turn off or delete your paid tiers before removing the Stripe keys.");
   }
@@ -357,6 +360,7 @@ export async function deleteTier(formData: FormData) {
 
 export async function changePassword(formData: FormData) {
   const user = await requireUser();
+  if (isDemoMode()) fail("account", DEMO_OFF);
   const current = String(formData.get("currentPassword") ?? "");
   const next = String(formData.get("newPassword") ?? "");
   const confirm = String(formData.get("confirmPassword") ?? "");
@@ -372,6 +376,8 @@ export async function changePassword(formData: FormData) {
 
 export async function savePrivacy(formData: FormData) {
   const user = await requireUser("CREATOR");
+  // A private demo would lock every visitor out.
+  if (isDemoMode()) fail("privacy", DEMO_OFF);
   await setInstancePrivate(formData.get("isPrivate") === "on");
   const tierId = String(formData.get("dmMinTierId") ?? "");
   const tier = tierId ? await prisma.tier.findFirst({ where: { id: tierId, creatorId: user.id }, select: { id: true } }) : null;

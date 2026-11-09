@@ -12,6 +12,7 @@ function origin(value: string | undefined): string {
 // Security headers for every page. Media comes from the storage endpoint, fonts from Google Fonts,
 // and nothing may frame the app. Next.js needs inline scripts and styles for hydration and theming.
 export function proxy() {
+  const demo = process.env.DEMO_MODE === "true";
   const storage = origin(process.env.MINIO_PUBLIC_ENDPOINT);
   const dev = process.env.NODE_ENV !== "production";
   const csp = [
@@ -32,6 +33,7 @@ export function proxy() {
   const response = NextResponse.next();
   response.headers.set("Content-Security-Policy", csp);
   response.headers.set("X-Content-Type-Options", "nosniff");
+  if (demo) response.headers.set("X-Robots-Tag", "noindex, nofollow");
   response.headers.set("X-Frame-Options", "DENY");
   response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
   response.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(self)");
