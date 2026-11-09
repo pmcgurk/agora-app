@@ -48,6 +48,8 @@ machine, copy `.env.example` to `.env` and:
   [Payments with Stripe](#payments-with-stripe)). Without a Stripe key, set
   `ALLOW_FREE_SUBSCRIPTIONS=false` on a public instance (it enables a test checkout
   that takes no payment);
+- to deploy on Render, follow [Run Agora on Render](docs/deploy-render.md); it comes with a ready-made
+  blueprint, [`render.yaml`](render.yaml);
 - put Agora behind an HTTPS reverse proxy. With an `https://` `NEXT_PUBLIC_BASE_URL`
   the container refuses to start with the default development passwords, and
   MinIO's admin console (port 9001) is only published on `127.0.0.1`.
@@ -71,8 +73,8 @@ demo address on your own domain):
   is hidden.
 
 **Demo mode deletes the database it runs on. Never enable it on a real site.** To run it locally:
-`DEMO_MODE=true docker compose up -d`. To host it, follow [Run the demo on Render](docs/deploy-render.md), which
-comes with a ready-made [`render.yaml`](render.yaml).
+`DEMO_MODE=true docker compose up -d`. To host it, follow [the demo section of the Render guide](docs/deploy-render.md#the-public-demo), which
+has its own blueprint, [`render.demo.yaml`](render.demo.yaml).
 
 ## Payments with Stripe
 
