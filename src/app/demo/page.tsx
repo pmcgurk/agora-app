@@ -51,7 +51,7 @@ export default async function DemoPage({ searchParams }: { searchParams: Promise
           <h2 className="text-lg font-semibold">As a supporter</h2>
           <p className="flex-1 text-sm text-muted">
             Priya backs Maya on the Studio Friend tier. Read the posts she can open, see the Maker Club posts that stay
-            locked, like, comment, send a tip or upgrade. No real money moves.
+            locked, and look at the tip and upgrade options.
           </p>
           <ViewButton view="supporter" primary>Browse as Priya</ViewButton>
         </div>
@@ -67,10 +67,9 @@ export default async function DemoPage({ searchParams }: { searchParams: Promise
 
       <section className={`${cardClass} space-y-2 text-sm text-muted`} aria-label="About the demo">
         <p>
-          <strong className="text-text">Everything resets.</strong> The demo wipes and re-seeds itself every{" "}
-          {demoResetMinutes()} minutes, and anything you post is public to other visitors until then. Uploads, email,
-          webhooks, API keys, Stripe keys and password changes are switched off so the demo stays safe to leave open.
-          Please keep posts friendly.
+          <strong className="text-text">The demo is read-only.</strong> You can look at everything, but posting,
+          commenting, liking, tipping, uploading and changing settings are switched off, and no money moves. The data
+          is refreshed every {demoResetMinutes()} minutes. On your own Agora, all of it works.
         </p>
       </section>
 

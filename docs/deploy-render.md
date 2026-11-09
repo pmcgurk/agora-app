@@ -38,8 +38,13 @@ Any S3-compatible service works (Backblaze B2, AWS S3, Wasabi). These steps are 
 The variables are called `MINIO_*` because Agora also runs against MinIO. They mean "S3 endpoint, bucket,
 access key and secret" for any provider. Use `MINIO_REGION=auto` for R2.
 
-The demo switches uploads off, so you don't need to set up browser upload rules (CORS). A real site that lets
-creators upload does: allow your site's origin to `PUT` and `GET` on the bucket.
+The demo is read-only, so you don't need to set up browser upload rules (CORS). A real site that lets creators
+upload does: allow your site's origin to `PUT` and `GET` on the bucket.
+
+**Read-only keys.** The demo needs write access only once, to upload its sample pictures on the first start.
+Afterwards, create a second R2 token with **Object Read only** for this bucket and put its key and secret in
+`MINIO_ROOT_USER` and `MINIO_ROOT_PASSWORD`. If the pictures are ever deleted, switch back to the read and write
+key for one restart.
 
 ## 2. Get SMTP details (optional, for waitlist emails)
 
@@ -115,17 +120,18 @@ promises), and delete entries on request.
 
 - **Resets.** When the server starts and every `DEMO_RESET_MINUTES` (default 60) it deletes everything and
   re-seeds Maya, her tiers, nine posts, two supporters and some analytics. Visitors who are signed in are signed
-  out, and anything they posted disappears. The waitlist is kept.
+  out and the page-view counters start again. The waitlist is kept.
 - **Setup wizard.** `/setup` and `/onboarding` can be replayed any number of times. The wizard checks what you
   type like the real thing but saves nothing, and the Stripe step shows the full tutorial with pre-filled
   fake keys.
-- **Money.** Stripe is never contacted, whatever keys are configured. Tiers and tips run in the no-money test
-  checkout.
-- **Switched off:** uploads and profile pictures, email settings and test emails, webhooks, API keys, Stripe
-  keys, password changes, the private-site switch and every way of creating another creator. These either
-  reach outside the server or would stop other visitors using the demo.
-- **Still open:** visitors can write text posts, comment and message. Those are public to other visitors until
-  the next reset. Shorten `DEMO_RESET_MINUTES` (minimum 5) if that worries you.
+- **Read-only.** Visitors can look at everything but cannot change anything: posting, editing, commenting,
+  liking, messaging, tipping, subscribing, uploading, sign-up and every settings change are refused. A banner
+  explains why when they try. Stripe is never contacted, whatever keys are configured.
+- **What can still be written.** Only the sign-in sessions that the three views create, page-view counters, and
+  waitlist entries. The setup wizard saves nothing.
+- **Storage is written only by the seed.** The demo uploads its sample pictures to the bucket the first time it
+  starts and skips any that are already there, so after the first successful start you can swap the storage
+  keys for read-only ones ([step 1](#1-create-the-storage-bucket-cloudflare-r2)).
 - **Search engines.** The demo sends `noindex` headers and a robots meta tag.
 
 ## Free tier limits

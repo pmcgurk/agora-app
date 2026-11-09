@@ -1,5 +1,6 @@
 "use server";
 
+import { blockInDemo } from "@/lib/demo-guard";
 import { redirect } from "next/navigation";
 import { createSession, destroySession } from "@/lib/auth";
 import { hashPassword, verifyPassword } from "@/lib/password";
@@ -27,6 +28,7 @@ function fail(path: string, message: string): never {
 }
 
 export async function signup(formData: FormData) {
+  await blockInDemo();
   const name = field(formData, "name");
   const email = field(formData, "email").toLowerCase();
   const password = String(formData.get("password") ?? "");

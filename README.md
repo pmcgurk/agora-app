@@ -63,9 +63,9 @@ demo address on your own domain):
   can be replayed any number of times and saves nothing), **as a supporter** on a paid tier, or **as a signed-out
   visitor**;
 - the whole database is wiped and re-seeded every `DEMO_RESET_MINUTES` (default 60);
-- anything that reaches outside the server or could hurt other visitors is switched off: uploads, email
-  settings, webhooks, API keys, Stripe keys (Stripe is never contacted), password changes and creating other
-  creators. Tips and tier purchases use the no-money test checkout;
+- the demo is **read-only**: visitors can look at everything, but posting, commenting, liking, tipping,
+  subscribing, uploading and every settings change are switched off (a banner explains why), and Stripe is
+  never contacted. Only the setup wizard, which saves nothing, and the waitlist can be used;
 - an optional waitlist form for a hosted version of Agora. Set `WAITLIST_EMAIL` to the address that should hear
   about sign-ups. They are also saved in the database and survive resets. Without `WAITLIST_EMAIL` the form
   is hidden.

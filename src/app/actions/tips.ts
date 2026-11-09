@@ -1,5 +1,6 @@
 "use server";
 
+import { blockInDemo } from "@/lib/demo-guard";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { isBlocked } from "@/lib/blocks";
@@ -19,6 +20,7 @@ function tipFail(returnPath: string, message: string): never {
 // A one-off tip from a logged-in patron or a guest. Stripe takes the payment through a hosted
 // checkout; test mode records it directly.
 export async function sendTip(formData: FormData) {
+  await blockInDemo();
   await requireInstanceAccess();
   const creator = await prisma.user.findFirst({
     where: { id: String(formData.get("creatorId") ?? ""), role: "CREATOR" },

@@ -1,7 +1,7 @@
 import sharp from "sharp";
 import type { Prisma, PrismaClient } from "../generated/prisma/client";
 import { hashPassword } from "./password";
-import { uploadObject } from "./s3";
+import { objectExists, uploadObject } from "./s3";
 
 // Sample data for the public demo and for trying Agora locally: a fictional ceramics creator with
 // three tiers, a dozen posts (images, a video, locked posts), two patrons and a few weeks of views.
@@ -59,7 +59,8 @@ type StoredImage = { id: string; key: string; size: number; palette: number };
 
 export type DemoAssets = { passwordHash: string; images: Record<ImageSet, { inline: StoredImage[]; gallery: StoredImage[] }> };
 
-// Pictures get fixed object keys, so every re-seed overwrites the same files instead of piling up.
+// Pictures get fixed object keys and are only uploaded when missing. After the first start the demo
+// never writes to storage again, so its keys can be swapped for read-only ones.
 export async function prepareDemoAssets(): Promise<DemoAssets> {
   const images = {} as DemoAssets["images"];
   let paletteIndex = 0;
@@ -70,7 +71,7 @@ export async function prepareDemoAssets(): Promise<DemoAssets> {
           const palette = paletteIndex++ % PALETTES.length;
           const body = await artwork(PALETTES[palette]);
           const key = `posts/${CREATOR_ID}/${name}-${kind}-${n}.jpg`;
-          await uploadObject(key, body, "image/jpeg");
+          if (!(await objectExists(key))) await uploadObject(key, body, "image/jpeg");
           return { id: `demo-media-${name}-${kind}-${n}`, key, size: body.length, palette };
         }),
       );

@@ -1,5 +1,6 @@
 "use server";
 
+import { blockInDemo } from "@/lib/demo-guard";
 import { endAllPlans, endOtherPlans, endPlan } from "@/lib/subscriptions";
 import { getStripe } from "@/lib/stripe";
 import { redirect } from "next/navigation";
@@ -173,6 +174,7 @@ async function readPostForm(creatorId: string, formData: FormData) {
 }
 
 export async function createPost(_previous: PostFormState, formData: FormData): Promise<PostFormState> {
+  await blockInDemo();
   const user = await requireUser("CREATOR");
   const form = await readPostForm(user.id, formData);
   if (typeof form === "string") return { error: form };
@@ -244,6 +246,7 @@ export async function createPost(_previous: PostFormState, formData: FormData): 
 }
 
 export async function updatePost(_previous: PostFormState, formData: FormData): Promise<PostFormState> {
+  await blockInDemo();
   const user = await requireUser("CREATOR");
   const post = await prisma.post.findFirst({
     where: { id: text(formData, "postId"), creatorId: user.id },
@@ -338,6 +341,7 @@ export async function updatePost(_previous: PostFormState, formData: FormData): 
 }
 
 export async function deletePost(formData: FormData) {
+  await blockInDemo();
   const user = await requireUser("CREATOR");
   const post = await prisma.post.findFirst({
     where: { id: text(formData, "postId"), creatorId: user.id },
@@ -355,6 +359,7 @@ function failGift(message: string): never {
 }
 
 export async function giftSubscription(formData: FormData) {
+  await blockInDemo();
   const user = await requireUser("CREATOR");
   const email = text(formData, "email").toLowerCase();
   const tierId = text(formData, "tierId");
@@ -400,6 +405,7 @@ export async function giftSubscription(formData: FormData) {
 }
 
 export async function revokeSubscription(formData: FormData) {
+  await blockInDemo();
   const user = await requireUser("CREATOR");
   const subscription = await prisma.subscription.findFirst({
     where: { id: text(formData, "subscriptionId"), status: "ACTIVE", tier: { creatorId: user.id } },
@@ -421,6 +427,7 @@ function backToMembers(kind: "notice" | "error", message: string): never {
 
 // Blocking removes the person's plan and stops them following, subscribing, commenting, liking or messaging.
 export async function blockUser(formData: FormData) {
+  await blockInDemo();
   const user = await requireUser("CREATOR");
   const userId = text(formData, "userId");
   const email = text(formData, "email").toLowerCase();
@@ -447,6 +454,7 @@ export async function blockUser(formData: FormData) {
 }
 
 export async function unblockUser(formData: FormData) {
+  await blockInDemo();
   const user = await requireUser("CREATOR");
   await prisma.block.deleteMany({ where: { creatorId: user.id, userId: text(formData, "userId") } });
   backToMembers("notice", "Unblocked.");
@@ -455,6 +463,7 @@ export async function unblockUser(formData: FormData) {
 // Issues the Stripe refund (when the payment came from Stripe), then marks the payment refunded and
 // ends the plan it paid for. Test checkout takes no real money, so it only updates the records.
 export async function refundPayment(formData: FormData) {
+  await blockInDemo();
   const user = await requireUser("CREATOR");
   const payment = await prisma.payment.findFirst({
     where: { id: text(formData, "paymentId"), creatorId: user.id, status: "PAID" },

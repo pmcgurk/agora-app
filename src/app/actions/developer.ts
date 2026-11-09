@@ -1,5 +1,6 @@
 "use server";
 
+import { blockInDemo } from "@/lib/demo-guard";
 import { redirect } from "next/navigation";
 import { createApiKey } from "@/lib/api-keys";
 import { requireUser } from "@/lib/auth";
@@ -24,6 +25,7 @@ export async function generateApiKey(_previous: ApiKeyState, formData: FormData)
 }
 
 export async function revokeApiKey(formData: FormData) {
+  await blockInDemo();
   const user = await requireUser("CREATOR");
   await prisma.apiKey.deleteMany({ where: { id: String(formData.get("keyId") ?? ""), userId: user.id } });
   redirect("/settings/api-keys?notice=Key+revoked.");
@@ -49,6 +51,7 @@ export async function createWebhook(formData: FormData) {
 }
 
 export async function toggleWebhook(formData: FormData) {
+  await blockInDemo();
   const user = await requireUser("CREATOR");
   const hook = await prisma.webhook.findFirst({ where: { id: String(formData.get("webhookId") ?? ""), userId: user.id } });
   if (hook) await prisma.webhook.update({ where: { id: hook.id }, data: { enabled: !hook.enabled } });
@@ -56,6 +59,7 @@ export async function toggleWebhook(formData: FormData) {
 }
 
 export async function deleteWebhook(formData: FormData) {
+  await blockInDemo();
   const user = await requireUser("CREATOR");
   await prisma.webhook.deleteMany({ where: { id: String(formData.get("webhookId") ?? ""), userId: user.id } });
   back("notice", "Webhook deleted.");

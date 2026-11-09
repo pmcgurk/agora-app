@@ -1,5 +1,6 @@
 "use server";
 
+import { blockInDemo } from "@/lib/demo-guard";
 import { redirect } from "next/navigation";
 import { Prisma } from "@/generated/prisma/client";
 import { destroyOtherSessions, requireUser } from "@/lib/auth";
@@ -42,6 +43,7 @@ function done(section: string, message = "Saved."): never {
 export type ProfileFormState = { error?: string; notice?: string };
 
 export async function saveProfile(_previous: ProfileFormState, formData: FormData): Promise<ProfileFormState> {
+  await blockInDemo();
   const user = await requireUser();
   const name = text(formData, "name");
   if (!name || name.length > 100) return { error: "Enter a name up to 100 characters." };
@@ -91,6 +93,7 @@ export async function saveProfile(_previous: ProfileFormState, formData: FormDat
 }
 
 export async function saveAppearance(formData: FormData) {
+  await blockInDemo();
   const user = await requireUser("CREATOR");
   const choice = text(formData, "theme");
   const showPoweredBy = formData.get("showPoweredBy") === "on";
@@ -115,6 +118,7 @@ export async function saveAppearance(formData: FormData) {
 
 // A theme file is plain JSON colors, never code: {"name": "Ocean", "colors": {"primary": "#0e7490", ...}}
 export async function uploadTheme(formData: FormData) {
+  await blockInDemo();
   const user = await requireUser("CREATOR");
   const file = formData.get("themeFile");
   if (!(file instanceof File) || file.size === 0) fail("appearance", "Choose a theme file.");
@@ -140,6 +144,7 @@ export async function uploadTheme(formData: FormData) {
 
 // Colour pickers on the Appearance page. Keeps any uploaded CSS or fonts, and replaces only the colours and radius.
 export async function saveCustomColours(formData: FormData) {
+  await blockInDemo();
   const user = await requireUser("CREATOR");
   const colours: Record<string, string> = {};
   for (const key of COLOR_KEYS) {
@@ -160,12 +165,14 @@ export async function saveCustomColours(formData: FormData) {
 }
 
 export async function removeTheme() {
+  await blockInDemo();
   const user = await requireUser("CREATOR");
   await prisma.user.update({ where: { id: user.id }, data: { themeSettings: Prisma.DbNull } });
   done("appearance", "Custom theme removed.");
 }
 
 export async function saveCurrency(formData: FormData) {
+  await blockInDemo();
   const user = await requireUser("CREATOR");
   const currency = text(formData, "currency");
   if (!isSupportedCurrency(currency)) fail("monetization", "Choose a supported currency.");
@@ -174,6 +181,7 @@ export async function saveCurrency(formData: FormData) {
 }
 
 export async function savePayments(formData: FormData) {
+  await blockInDemo();
   const user = await requireUser("CREATOR");
   const enable = formData.get("acceptsPayments") === "on";
   if (enable && (await paymentMode()) === "off") {
@@ -189,6 +197,7 @@ export async function savePayments(formData: FormData) {
 const MAX_TIER_DESCRIPTION = 400;
 
 export async function saveFeedPaging(formData: FormData) {
+  await blockInDemo();
   const user = await requireUser("CREATOR");
   const feedPaging = text(formData, "feedPaging") === "pages" ? "pages" : "scroll";
   const size = Number(text(formData, "feedPageSize"));
@@ -198,6 +207,7 @@ export async function saveFeedPaging(formData: FormData) {
 }
 
 export async function saveTips(formData: FormData) {
+  await blockInDemo();
   const user = await requireUser("CREATOR");
   const enable = formData.get("tipsEnabled") === "on";
   if (enable && (await paymentMode()) === "off") {
@@ -282,6 +292,7 @@ function presentationFields(formData: FormData, path: string) {
 }
 
 export async function createTier(formData: FormData) {
+  await blockInDemo();
   const user = await requireUser("CREATOR");
   const path = returnPath(formData);
   if (!user.acceptsPayments || (await paymentMode()) === "off") {
@@ -302,6 +313,7 @@ export async function createTier(formData: FormData) {
 }
 
 export async function updateTier(formData: FormData) {
+  await blockInDemo();
   const user = await requireUser("CREATOR");
   const path = returnPath(formData);
   const tier = await prisma.tier.findFirst({ where: { id: text(formData, "tierId"), creatorId: user.id } });
@@ -326,6 +338,7 @@ export async function updateTier(formData: FormData) {
 }
 
 export async function setTierActive(formData: FormData) {
+  await blockInDemo();
   const user = await requireUser("CREATOR");
   const tier = await prisma.tier.findFirst({ where: { id: text(formData, "tierId"), creatorId: user.id } });
   if (!tier) fail("/dashboard/tiers", "That tier no longer exists.");
@@ -339,6 +352,7 @@ export async function setTierActive(formData: FormData) {
 }
 
 export async function deleteTier(formData: FormData) {
+  await blockInDemo();
   const user = await requireUser("CREATOR");
   const tier = await prisma.tier.findFirst({ where: { id: text(formData, "tierId"), creatorId: user.id } });
   if (!tier) fail("/dashboard/tiers", "That tier no longer exists.");
@@ -389,6 +403,7 @@ export async function savePrivacy(formData: FormData) {
 }
 
 export async function saveNotifications(formData: FormData) {
+  await blockInDemo();
   const user = await requireUser();
   const on = (name: string) => formData.get(name) === "on";
   if (user.role === "CREATOR") {
