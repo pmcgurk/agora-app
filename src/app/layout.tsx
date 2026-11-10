@@ -5,6 +5,7 @@ import DemoBanner from "@/components/DemoBanner";
 import FontLink from "@/components/FontLink";
 import ThemeCss from "@/components/ThemeCss";
 import { isDemoMode } from "@/lib/demo";
+import { creatorIcons } from "@/lib/favicon";
 import { getSiteCreator } from "@/lib/instance";
 import { themeStyle } from "@/themes";
 
@@ -16,6 +17,8 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     title: creator?.name ?? "Agora",
     description: "A self-hosted platform for creators and their communities.",
+    // On a single-creator site the tab icon is the creator's own picture.
+    ...(creator ? { icons: creatorIcons(creator, { single: true }) } : {}),
     // A public demo is not a site worth finding in search results.
     ...(isDemoMode() ? { robots: { index: false, follow: false } } : {}),
   };

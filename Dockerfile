@@ -1,7 +1,8 @@
 FROM node:22-alpine
 
-# OpenSSL: Prisma's schema engine. ffmpeg: cuts free video previews.
-RUN apk add --no-cache openssl ffmpeg
+# OpenSSL: Prisma's schema engine. ffmpeg: cuts free video previews. A font: lets the favicon draw a
+# creator's initial.
+RUN apk add --no-cache openssl ffmpeg ttf-dejavu
 
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
