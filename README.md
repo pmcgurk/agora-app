@@ -48,8 +48,11 @@ machine, copy `.env.example` to `.env` and:
   [Payments with Stripe](#payments-with-stripe)). Without a Stripe key, set
   `ALLOW_FREE_SUBSCRIPTIONS=false` on a public instance (it enables a test checkout
   that takes no payment);
-- to deploy on Render, follow [Run Agora on Render](docs/deploy-render.md); it comes with a ready-made
-  blueprint, [`render.yaml`](render.yaml);
+- **to go live, follow [Deploying Agora](docs/deploying.md)**: what it needs and how to run it on any host, with a
+  ready-made [Docker Compose + Caddy setup](docker-compose.prod.yml) for one server and a
+  [Render guide](docs/deploy-render.md) (blueprint: [`render.yaml`](render.yaml));
+- set `SETUP_TOKEN` on any public server: setup then asks for it, so nobody else can claim the site first;
+- set up [backups](docs/backups.md) and run the restore drill once;
 - put Agora behind an HTTPS reverse proxy. With an `https://` `NEXT_PUBLIC_BASE_URL`
   the container refuses to start with the default development passwords, and
   MinIO's admin console (port 9001) is only published on `127.0.0.1`.

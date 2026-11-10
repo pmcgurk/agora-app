@@ -1,0 +1,15 @@
+# Used by docker-compose.prod.yml. Caddy gets and renews HTTPS certificates for both names on its own, as long
+# as their DNS records point at this machine and ports 80 and 443 are open.
+#
+# Caddy adds the real client address to X-Forwarded-For, which Agora uses to rate-limit sign-in attempts.
+# It also passes the original Host header on, which signed storage links depend on.
+
+{$SITE_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy app:3000
+}
+
+# File storage (pictures, video, downloads and uploads), reached with short-lived signed links.
+{$MEDIA_DOMAIN} {
+	reverse_proxy minio:9000
+}

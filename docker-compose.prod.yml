@@ -1,0 +1,119 @@
+# Agora on one server with Docker Compose, behind Caddy, which gets and renews HTTPS certificates by itself.
+# Works on any VPS or machine where you can run Docker. Full walkthrough: docs/deploying.md.
+#
+#   cp .env.production.example .env      # then fill it in
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# Two public names point at this machine: SITE_DOMAIN for the site and MEDIA_DOMAIN for the file storage
+# (browsers load pictures and upload files from it through short-lived signed links, so it has to be
+# reachable from the internet). Nothing else is published: Postgres and the app are on the private network.
+name: agora
+
+services:
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - app
+      - minio
+    environment:
+      SITE_DOMAIN: ${SITE_DOMAIN:?Set SITE_DOMAIN in .env (for example blog.example.com)}
+      MEDIA_DOMAIN: ${MEDIA_DOMAIN:?Set MEDIA_DOMAIN in .env (for example media.example.com)}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+  postgres:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: agora
+      POSTGRES_USER: agora
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agora -d agora"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # MinIO's official images were removed from Docker Hub; this is the community fork the project uses.
+  minio:
+    image: ${MINIO_IMAGE:-pgsty/minio:RELEASE.2026-08-04T00-00-00Z}
+    restart: unless-stopped
+    command: minio server /data
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-agora_minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in .env}
+      # Browsers upload straight to storage, so only the site itself may.
+      MINIO_API_CORS_ALLOW_ORIGIN: https://${SITE_DOMAIN:?}
+    volumes:
+      - minio_data:/data
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    environment:
+      DATABASE_URL: postgresql://agora:${POSTGRES_PASSWORD}@postgres:5432/agora?schema=public
+      NEXT_PUBLIC_BASE_URL: https://${SITE_DOMAIN}
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_PUBLIC_ENDPOINT: https://${MEDIA_DOMAIN}
+      MINIO_BUCKET: ${MINIO_BUCKET:-agora-media}
+      MINIO_REGION: ${MINIO_REGION:-us-east-1}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-agora_minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      # Whoever opens /setup first owns the site, so setup asks for this. Required here on purpose.
+      SETUP_TOKEN: ${SETUP_TOKEN:?Set SETUP_TOKEN in .env (openssl rand -hex 24)}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-1024}
+      # Without Stripe keys this must stay false, or anyone could "buy" a paid tier for free.
+      ALLOW_FREE_SUBSCRIPTIONS: ${ALLOW_FREE_SUBSCRIPTIONS:-false}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      MAIL_HOST: ${MAIL_HOST:-}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_SECURE: ${MAIL_SECURE:-false}
+      MAIL_USER: ${MAIL_USER:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:-}
+
+  # `docker compose -f docker-compose.prod.yml run --rm backup` writes a dated database dump and a media
+  # mirror to ./backups. See docs/backups.md.
+  backup:
+    profiles: ["backup"]
+    build:
+      context: .
+      dockerfile: Dockerfile.backup
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    environment:
+      DATABASE_URL: postgresql://agora:${POSTGRES_PASSWORD}@postgres:5432/agora
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_BUCKET: ${MINIO_BUCKET:-agora-media}
+      MINIO_REGION: ${MINIO_REGION:-us-east-1}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-agora_minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      BACKUP_DIR: /backups
+      BACKUP_KEEP: ${BACKUP_KEEP:-14}
+      BACKUP_AGE_RECIPIENT: ${BACKUP_AGE_RECIPIENT:-}
+    volumes:
+      - ./backups:/backups
+
+volumes:
+  caddy_data:
+  caddy_config:
+  postgres_data:
+  minio_data:
