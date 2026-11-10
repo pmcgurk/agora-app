@@ -8,6 +8,9 @@ import { announceDuePosts } from "./publishing";
 // is what tells subscribers about them, within a minute of their time.
 const state = globalThis as { __agoraPublisher?: NodeJS.Timeout };
 
+// Once a minute unless told otherwise. The browser tests set PUBLISHER_INTERVAL_SECONDS so they need not wait.
+const INTERVAL_MS = Math.max(1, Number(process.env.PUBLISHER_INTERVAL_SECONDS) || 60) * 1000;
+const TICKS_PER_HOUR = Math.max(1, Math.round((60 * 60 * 1000) / INTERVAL_MS));
 let ticks = 0;
 
 async function tick() {
@@ -15,7 +18,7 @@ async function tick() {
     await announceDuePosts();
     await sendQueuedPostEmails();
     // Once an hour, throw away sessions and email links that can never be used again.
-    if (ticks++ % 60 === 0) await cleanExpired();
+    if (ticks++ % TICKS_PER_HOUR === 0) await cleanExpired();
   } catch (error) {
     console.error("Announcing scheduled posts failed:", error instanceof Error ? error.message : error);
   }
@@ -24,6 +27,6 @@ async function tick() {
 export function startPublisher() {
   if (state.__agoraPublisher) return;
   void tick();
-  state.__agoraPublisher = setInterval(() => void tick(), 60_000);
+  state.__agoraPublisher = setInterval(() => void tick(), INTERVAL_MS);
   state.__agoraPublisher.unref();
 }

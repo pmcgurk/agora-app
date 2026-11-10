@@ -16,7 +16,8 @@
     "demo:seed": "tsx prisma/demo-seed.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "reset-link": "tsx prisma/reset-link.ts"
+    "reset-link": "tsx prisma/reset-link.ts",
+    "test:e2e": "node e2e/prepare.mjs && playwright test"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.800.0",
@@ -33,6 +34,7 @@
     "stripe": "^23.1.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.65.0",
     "@types/node": "^22.15.0",
     "@types/nodemailer": "^8.0.2",
     "@types/pg": "^8.23.1",
