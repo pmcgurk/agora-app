@@ -1,16 +1,22 @@
 import type { ReactNode } from "react";
 import CreatorNav, { type NavGroup } from "@/components/CreatorNav";
 import { isInstanceOwner } from "@/lib/instance";
+import { countUnpublished } from "@/lib/publishing";
 
 // The shared frame for a creator's dashboard and settings pages.
 export default async function CreatorWorkspace({ userId, children }: { userId: string; children: ReactNode }) {
-  const owner = await isInstanceOwner(userId);
+  const [owner, unpublished] = await Promise.all([isInstanceOwner(userId), countUnpublished(userId)]);
+  const waiting = unpublished.drafts + unpublished.scheduled;
   const groups: NavGroup[] = [
     {
       title: "Your page",
       links: [
         { href: "/dashboard", label: "Overview" },
-        { href: "/dashboard/posts", label: "Posts" },
+        {
+          href: "/dashboard/posts",
+          label: "Posts",
+          badge: waiting > 0 ? { count: waiting, description: `${unpublished.drafts} drafts, ${unpublished.scheduled} scheduled` } : undefined,
+        },
         { href: "/dashboard/members", label: "Members" },
         { href: "/dashboard/tiers", label: "Tiers" },
         { href: "/dashboard/analytics", label: "Analytics" },

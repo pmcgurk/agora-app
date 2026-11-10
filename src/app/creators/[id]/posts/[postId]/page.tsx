@@ -15,7 +15,9 @@ import { getCurrentUser } from "@/lib/auth";
 import { creatorPath, getCreator } from "@/lib/creator";
 import { getSiteCreator } from "@/lib/instance";
 import { prisma } from "@/lib/prisma";
+import { isLive, postState } from "@/lib/publishing";
 import { recordPostView } from "@/lib/views";
+import LocalDateTime from "@/components/LocalDateTime";
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +42,9 @@ export default async function PostPage({ params }: { params: Promise<{ id: strin
 
   const viewer = await getCurrentUser();
   const access = await getAccessContext(creator.id, viewer);
+  // Drafts and scheduled posts do not exist for anyone but their creator.
+  if (!access.isOwner && !isLive(post.publishedAt)) notFound();
+  const state = postState(post);
   const unlocked = canView(post, access);
   const homeHref = (await getSiteCreator())?.id === creator.id ? "/" : creatorPath(creator);
   if (!access.isOwner) after(() => recordPostView(post.id));
@@ -100,9 +105,18 @@ export default async function PostPage({ params }: { params: Promise<{ id: strin
       <p>
         <Link href={homeHref} className={linkClass}>← All posts</Link>
       </p>
+      {state !== "published" && (
+        <p role="note" className="rounded-theme bg-secondary p-3 text-sm">
+          {state === "draft" ? (
+            <>This is a <strong>draft</strong>. Only you can see it until you publish it.</>
+          ) : (
+            <>This post is <strong>scheduled</strong> for <LocalDateTime value={post.publishedAt!.toISOString()} />. Only you can see it until then.</>
+          )}
+        </p>
+      )}
       <h2 className="text-2xl font-semibold">{post.title}</h2>
       <p className="text-xs text-muted">
-        {post.createdAt.toISOString().slice(0, 10)}
+        {(post.publishedAt ?? post.createdAt).toISOString().slice(0, 10)}
         {access.isOwner && (
           <>
             {" · "}

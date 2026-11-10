@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import PostComposer from "@/components/PostComposer";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { postState } from "@/lib/publishing";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +31,8 @@ export default async function EditPostPage({ params }: { params: Promise<{ id: s
           previewSeconds: post.previewSeconds,
           allowBlurPreview: post.allowBlurPreview,
           clearThumbnail: post.clearThumbnail,
+          state: postState(post),
+          publishedAt: post.publishedAt?.toISOString() ?? null,
           media: post.media,
         }}
       />

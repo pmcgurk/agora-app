@@ -187,6 +187,8 @@ export async function writeDemoData(db: Prisma.TransactionClient, assets: DemoAs
         isPublic: input.isPublic,
         minTierId: input.tier?.id ?? null,
         createdAt: input.createdAt,
+        publishedAt: input.createdAt,
+        announcedAt: input.createdAt,
         media: {
           create: [...inline.map((image) => ({ ...image, inline: true })), ...gallery.map((image) => ({ ...image, inline: false }))].map(
             (image, position) => ({

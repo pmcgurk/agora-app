@@ -170,6 +170,11 @@ model Post {
   // When false, viewers without access see a blurred video thumbnail instead of a clear one.
   clearThumbnail   Boolean       @default(false)
   editedAt         DateTime?
+  // null = draft, in the future = scheduled, in the past = published. Defaults to now, so posts made any
+  // other way (the API, seeding) are published straight away.
+  publishedAt      DateTime?     @default(now())
+  // When subscribers and webhooks were told about the post; null until then.
+  announcedAt      DateTime?
   comments         Comment[]
   likes            PostLike[]
   views            PostViewDay[]
@@ -178,6 +183,8 @@ model Post {
   media            PostMedia[]
   creator          User          @relation("CreatorPosts", fields: [creatorId], references: [id], onDelete: Cascade)
   minTier          Tier?         @relation("MinimumTier", fields: [minTierId], references: [id], onDelete: SetNull)
+
+  @@index([creatorId, publishedAt])
 }
 
 // Files live in MinIO only (Rule 1); this table stores object keys, never file contents.

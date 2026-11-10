@@ -1,7 +1,11 @@
-// Runs once when the server starts. In demo mode it seeds the fictional creator and schedules the
-// periodic reset; on a normal instance it does nothing.
+// Runs once when the server starts: it begins announcing scheduled posts and, in demo mode, seeds the
+// fictional creator and schedules the periodic reset.
 export async function register() {
-  if (process.env.NEXT_RUNTIME !== "nodejs" || process.env.DEMO_MODE !== "true") return;
-  const { startDemoLifecycle } = await import("@/lib/demo-lifecycle");
-  startDemoLifecycle();
+  if (process.env.NEXT_RUNTIME !== "nodejs") return;
+  if (process.env.DEMO_MODE === "true") {
+    const { startDemoLifecycle } = await import("@/lib/demo-lifecycle");
+    startDemoLifecycle();
+  }
+  const { startPublisher } = await import("@/lib/publisher");
+  startPublisher();
 }

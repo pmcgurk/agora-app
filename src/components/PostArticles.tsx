@@ -47,7 +47,7 @@ export default async function PostArticles({
               <Link href={`${base}/posts/${post.id}`}>{post.title}</Link>
             </h2>
             <p className="text-xs text-muted">
-              {post.createdAt.toISOString().slice(0, 10)}
+              {(post.publishedAt ?? post.createdAt).toISOString().slice(0, 10)}
               {!post.isPublic && ` · ${post.minTier ? `${post.minTier.name}+` : "private"}`}
               {unlocked ? "" : " · locked"}
             </p>

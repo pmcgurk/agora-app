@@ -229,6 +229,13 @@ Every demo account uses the password `demo-password`.
 - Patrons can search a creator's posts. Titles are always searched; post text only in posts the
   searcher can open, so a search never reveals what is inside a locked post.
 - Creators see an "Edit post" button on their own posts, in the feed and on the post page.
+- Drafts and scheduled posts: when writing a post the creator chooses to publish now, schedule it for a later
+  date and time (in their own time zone), or save it as a draft. Drafts and scheduled posts are visible only
+  to the creator, in the Posts list and by direct link, and never appear in feeds, search, the API for
+  others or the media endpoint. A scheduled post goes live on its own and subscribers and webhooks are
+  told then, within about a minute (a timer inside the server does this, so run a single long-lived
+  instance, not a serverless platform). The API accepts `status: "draft"` and `publishAt` too.
+- The browser-tab icon is the creator's profile picture (a tile with their initial until they add one).
 - Custom thank-you messages: one per tier (shown after someone joins) and one for tips (Settings → Payments).
 - The setup wizard walks through connecting Stripe (API key, webhook, payouts) if it isn't connected yet.
 - Switching tier replaces the old plan: the previous plan is ended straight away (and cancelled in Stripe),

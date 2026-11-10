@@ -8,6 +8,7 @@ import { getCreator } from "@/lib/creator";
 import { cleanSearch, fetchPosts, pageSizeOf } from "@/lib/feed";
 import { prisma } from "@/lib/prisma";
 import { requireInstanceAccess } from "@/lib/instance";
+import { publishedWhere } from "@/lib/publishing";
 
 export type MorePosts = { cards: ReactNode; next: string | null };
 
@@ -26,5 +27,5 @@ export async function countNewPosts(creatorId: string, since: string): Promise<n
   await requireInstanceAccess();
   const date = new Date(since);
   if (Number.isNaN(date.getTime())) return 0;
-  return prisma.post.count({ where: { creatorId, createdAt: { gt: date } } });
+  return prisma.post.count({ where: { creatorId, AND: [publishedWhere(), { publishedAt: { gt: date } }] } });
 }

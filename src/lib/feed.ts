@@ -1,6 +1,7 @@
 import type { Prisma } from "@/generated/prisma/client";
 import type { AccessContext } from "@/lib/access";
 import { prisma } from "@/lib/prisma";
+import { publishedWhere } from "@/lib/publishing";
 
 export const FEED_PAGE_SIZES = [3, 5, 10, 20] as const;
 export const DEFAULT_PAGE_SIZE = 5;
@@ -45,8 +46,9 @@ export async function fetchPosts(options: {
 }) {
   const { creatorId, access, q, cursor, page, pageSize } = options;
   const rows = await prisma.post.findMany({
-    where: { creatorId, ...searchWhere(q, access) },
-    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    // Drafts and scheduled posts never appear in a feed, not even the creator's own.
+    where: { creatorId, AND: [publishedWhere(), searchWhere(q, access)] },
+    orderBy: [{ publishedAt: "desc" }, { id: "desc" }],
     take: pageSize + 1,
     ...(cursor ? { cursor: { id: cursor }, skip: 1 } : page && page > 1 ? { skip: (page - 1) * pageSize } : {}),
     include: {

@@ -1,4 +1,5 @@
 import { creatorPath } from "@/lib/creator";
+import { postState } from "@/lib/publishing";
 import { absoluteUrl } from "@/lib/webhooks";
 
 type ApiPost = {
@@ -6,6 +7,7 @@ type ApiPost = {
   title: string;
   textContent: string;
   createdAt: Date;
+  publishedAt: Date | null;
   editedAt: Date | null;
   isPublic: boolean;
   minTier: { id: string; name: string } | null;
@@ -19,6 +21,9 @@ export function serializePost(post: ApiPost, creator: { id: string; slug: string
     title: post.title,
     text: post.textContent,
     createdAt: post.createdAt,
+    // draft, scheduled or published; publishedAt is null for drafts and in the future when scheduled.
+    status: postState(post),
+    publishedAt: post.publishedAt,
     editedAt: post.editedAt,
     visibility: post.isPublic ? "public" : post.minTier ? "tier" : "private",
     tier: post.minTier,
