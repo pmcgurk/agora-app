@@ -3,7 +3,10 @@
 import { blockInDemo } from "@/lib/demo-guard";
 import { redirect } from "next/navigation";
 import { Prisma } from "@/generated/prisma/client";
-import { destroyOtherSessions, requireUser } from "@/lib/auth";
+import { after } from "next/server";
+import { mailIsConfigured, sendEmailChangeLink, sendEmailInUseNotice, sendAccountDeletedNotice } from "@/lib/account-email";
+import { deleteAccountData } from "@/lib/account-delete";
+import { destroyOtherSessions, destroySession, requireUser } from "@/lib/auth";
 import { activeSubscriptionWhere } from "@/lib/access";
 import { getStripe } from "@/lib/stripe";
 import { normalizeSocialLink, SOCIAL_PLATFORMS } from "@/lib/social-links";
@@ -12,6 +15,7 @@ import { DEMO_OFF, isDemoMode } from "@/lib/demo";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { paymentMode, STRIPE_KEY_PATTERN, STRIPE_WEBHOOK_SECRET_PATTERN, stripeConfigured } from "@/lib/payments";
 import { prisma } from "@/lib/prisma";
+import { clientIp, withinLimit } from "@/lib/rate-limit";
 import { encryptSecret } from "@/lib/secrets";
 import { SLUG_PATTERN } from "@/lib/profile-fields";
 import { setInstancePrivate } from "@/lib/instance";
@@ -387,6 +391,63 @@ export async function changePassword(formData: FormData) {
   await prisma.user.update({ where: { id: user.id }, data: { passwordHash: await hashPassword(next) } });
   await destroyOtherSessions(user.id);
   done("account", "Password changed. Other devices were signed out.");
+}
+
+// Asks to use a different email address. With email set up the new address gets a link and the change happens when
+// its owner opens it; the answer on screen is the same whether or not the address is taken, so this cannot be used
+// to find out who is registered. Without email there is nobody to confirm with, so it changes at once.
+export async function requestEmailChange(formData: FormData) {
+  await blockInDemo();
+  const user = await requireUser();
+  const newEmail = text(formData, "newEmail").toLowerCase();
+  const password = String(formData.get("password") ?? "");
+
+  if (!withinLimit(`email-change:${user.id}`, 5, 60 * 60 * 1000) || !withinLimit(`email-change-ip:${await clientIp()}`, 20, 60 * 60 * 1000)) {
+    fail("account", "Too many attempts. Try again later.");
+  }
+  if (!/^[^s@]+@[^s@]+.[^s@]+$/.test(newEmail) || newEmail.length > 254) fail("account", "Enter a valid email address.");
+  if (newEmail === user.email) fail("account", "That is already your email address.");
+  if (!(await verifyPassword(password, user.passwordHash))) fail("account", "Your password is incorrect.");
+
+  if (await mailIsConfigured()) {
+    after(async () => {
+      try {
+        const taken = await prisma.user.findUnique({ where: { email: newEmail }, select: { id: true } });
+        if (taken) await sendEmailInUseNotice(newEmail);
+        else await sendEmailChangeLink(user, newEmail);
+      } catch (error) {
+        console.error("Sending the email change message failed:", error instanceof Error ? error.message : error);
+      }
+    });
+    done("account", `We sent a confirmation link to ${newEmail}. Your address changes when you open it.`);
+  }
+  if (await prisma.user.findUnique({ where: { email: newEmail }, select: { id: true } })) fail("account", "That email is already registered.");
+  await prisma.user.update({ where: { id: user.id }, data: { email: newEmail, emailVerifiedAt: new Date() } });
+  done("account", "Email changed.");
+}
+
+// Deletes a member's own account. Creators are refused: deleting one would delete the whole page.
+export async function deleteAccount(formData: FormData) {
+  await blockInDemo();
+  const user = await requireUser();
+  if (user.role === "CREATOR") {
+    fail("account", "Creator accounts can't be deleted here, because that would delete the whole page. Download your data instead, or ask whoever runs the server.");
+  }
+  if (!withinLimit(`delete-account:${user.id}`, 5, 60 * 60 * 1000)) fail("account", "Too many attempts. Try again later.");
+  if (!(await verifyPassword(String(formData.get("password") ?? ""), user.passwordHash))) fail("account", "Your password is incorrect.");
+  if (formData.get("confirm") !== "on") fail("account", "Tick the box to confirm that you want to delete your account.");
+
+  try {
+    await deleteAccountData(user.id);
+  } catch (error) {
+    console.error("Deleting an account failed:", error instanceof Error ? error.message : error);
+    fail("account", "We couldn't cancel your paid membership with Stripe, so nothing was deleted. Try again in a moment.");
+  }
+  await destroySession();
+  if (await mailIsConfigured()) {
+    after(() => sendAccountDeletedNotice({ name: user.name, email: user.email }).catch(() => undefined));
+  }
+  redirect("/?notice=" + encodeURIComponent("Your account has been deleted."));
 }
 
 export async function savePrivacy(formData: FormData) {

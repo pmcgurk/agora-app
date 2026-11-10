@@ -464,6 +464,8 @@ model WaitlistEntry {
 enum EmailTokenKind {
   PASSWORD_RESET
   VERIFY_EMAIL
+  // Confirms a new address for an account; the address itself is the payload.
+  EMAIL_CHANGE
 }
 
 // A single-use link sent by email. Only a hash of the token is stored, so a database leak cannot be
@@ -473,6 +475,8 @@ model EmailToken {
   userId    String
   kind      EmailTokenKind
   tokenHash String         @unique
+  // What the link is for beyond the account itself (the new email address, for EMAIL_CHANGE).
+  payload   String?
   expiresAt DateTime
   usedAt    DateTime?
   createdAt DateTime       @default(now())

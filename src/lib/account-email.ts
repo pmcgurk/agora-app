@@ -1,5 +1,14 @@
 import { createEmailToken, TOKEN_LIFETIME_MS } from "@/lib/email-tokens";
-import { alreadyRegisteredEmail, finishSignupEmail, passwordResetEmail, verifyEmailEmail } from "@/lib/email-templates";
+import {
+  accountDeletedEmail,
+  alreadyRegisteredEmail,
+  confirmEmailChangeEmail,
+  emailChangedNoticeEmail,
+  emailInUseNoticeEmail,
+  finishSignupEmail,
+  passwordResetEmail,
+  verifyEmailEmail,
+} from "@/lib/email-templates";
 import { createPendingSignup, SIGNUP_LINK_LIFETIME_MS } from "@/lib/pending-signups";
 import { siteName } from "@/lib/instance";
 import { getMailSettings, sendMail } from "@/lib/mail";
@@ -63,4 +72,33 @@ export async function sendAlreadyRegisteredEmail(user: Recipient): Promise<void>
   await sendMail(
     alreadyRegisteredEmail({ to: user.email, siteName: await siteName(), name: user.name, loginUrl: publicUrl("/login"), resetUrl: publicUrl("/forgot-password") }),
   );
+}
+
+type EmailChangeRecipient = Recipient & { email: string };
+
+// The confirmation link goes to the NEW address and carries it, so the change only happens once its owner opens it.
+export async function sendEmailChangeLink(user: EmailChangeRecipient, newEmail: string): Promise<void> {
+  const token = await createEmailToken(user.id, "EMAIL_CHANGE", newEmail);
+  await sendMail(
+    confirmEmailChangeEmail({
+      to: newEmail,
+      siteName: await siteName(),
+      name: user.name,
+      url: publicUrl(`/confirm-email-change/${token}`),
+      hours: TOKEN_LIFETIME_MS.EMAIL_CHANGE / (60 * 60 * 1000),
+    }),
+  );
+}
+
+export async function sendEmailInUseNotice(address: string): Promise<void> {
+  await sendMail(emailInUseNoticeEmail({ to: address, siteName: await siteName(), loginUrl: publicUrl("/login") }));
+}
+
+// Told to the OLD address after a change, so a hijacked account cannot quietly move its email.
+export async function sendEmailChangedNotice(oldEmail: string, user: { name: string }, newEmail: string): Promise<void> {
+  await sendMail(emailChangedNoticeEmail({ to: oldEmail, siteName: await siteName(), name: user.name, newEmail, resetUrl: publicUrl("/forgot-password") }));
+}
+
+export async function sendAccountDeletedNotice(user: { name: string; email: string }): Promise<void> {
+  await sendMail(accountDeletedEmail({ to: user.email, siteName: await siteName(), name: user.name }));
 }
