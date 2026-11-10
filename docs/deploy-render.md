@@ -86,16 +86,17 @@ access key and secret" for any provider. R2 wants `MINIO_REGION=auto`, which the
 
 ## 4. Create your account straight away
 
-**The first person to open the setup screen becomes the site owner.** As soon as the site is reachable, open
-`https://<your address>/setup`, create your account and walk through the wizard. Do this before you share the
-address or announce anything.
+**The first person to finish the setup screen becomes the site owner**, so setup is locked with a token. The blueprint
+makes Render generate one: copy the `SETUP_TOKEN` value from the service's **Environment** tab. Then open
+`https://<your address>/setup`, enter the token, create your account and walk through the wizard. Do this before you
+share the address or announce anything.
 
 The wizard asks for your name, your page details and, optionally, Stripe. You can finish it later in
 **Settings**.
 
 ## 5. Check it works
 
-- `https://<your address>/api/health` returns `{"status":"ok"}`.
+- `https://<your address>/api/health` returns `{"status":"ok"}`. Render checks it too, and the blueprint tells it to.
 - Write a post with a picture. If the upload fails in the browser, the bucket's CORS policy is missing or does
   not match your address. If the picture is broken afterwards, see [troubleshooting](#troubleshooting).
 - Open the site in a private window to see what visitors see.
@@ -114,6 +115,9 @@ You can configure both inside Agora as the owner, or as environment variables on
   it. Use **Send test email** to check.
 
 ## Keeping it running
+
+See also [Backups](backups.md), which works with Render's database and any S3-compatible bucket, and the
+[host-neutral deployment guide](deploying.md).
 
 - **Updates.** Render redeploys when you push to the branch it follows. Migrations run on start.
 - **Backups.** Your posts and members live in Postgres and your files in the bucket. Check that your database plan
