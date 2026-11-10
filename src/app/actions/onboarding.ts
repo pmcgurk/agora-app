@@ -8,9 +8,12 @@ import { hashPassword } from "@/lib/password";
 import { paymentMode, STRIPE_KEY_PATTERN, STRIPE_WEBHOOK_SECRET_PATTERN } from "@/lib/payments";
 import { prisma } from "@/lib/prisma";
 import { clientIp, withinLimit } from "@/lib/rate-limit";
+import { setupTokenMatches } from "@/lib/setup-token";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_PASSWORD_LENGTH = 10;
+// Held while the owner account is created, so two requests at once cannot both pass the "no creator yet" check.
+const SETUP_LOCK_KEY = 7_270_001;
 
 function text(formData: FormData, name: string): string {
   const value = formData.get(name);
@@ -32,6 +35,9 @@ export async function setupInstance(formData: FormData) {
   const name = text(formData, "name");
   const email = text(formData, "email").toLowerCase();
   const password = String(formData.get("password") ?? "");
+  if (!demo && !setupTokenMatches(String(formData.get("setupToken") ?? ""))) {
+    failAt("/setup", "That setup token isn't right. It is the SETUP_TOKEN value in this server's environment.");
+  }
   if (!name || name.length > 100) failAt("/setup", "Enter a name up to 100 characters.");
   if (!EMAIL_PATTERN.test(email) || email.length > 254) failAt("/setup", "Enter a valid email address.");
   if (password.length < MIN_PASSWORD_LENGTH || password.length > 200) {
@@ -43,25 +49,34 @@ export async function setupInstance(formData: FormData) {
     await createSession(maya.id);
     redirect("/onboarding");
   }
-  if (await prisma.user.findUnique({ where: { email }, select: { id: true } })) failAt("/setup", "That email is already registered.");
-
-  const user = await prisma.user.create({
-    data: {
-      name,
-      email,
-      role: "CREATOR",
-      passwordHash: await hashPassword(password),
-      // Every creator gets a free tier so visitors can simply follow them.
-      createdTiers: { create: { name: "Follower", price: 0 } },
-    },
+  const passwordHash = await hashPassword(password);
+  // The check and the creation happen under one lock, so only one request can ever become the owner.
+  const created = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(${SETUP_LOCK_KEY}::bigint)`;
+    if (await tx.user.findFirst({ where: { role: "CREATOR" }, select: { id: true } })) return "done" as const;
+    if (await tx.user.findUnique({ where: { email }, select: { id: true } })) return "taken" as const;
+    const owner = await tx.user.create({
+      data: {
+        name,
+        email,
+        role: "CREATOR",
+        emailVerifiedAt: new Date(),
+        passwordHash,
+        // Every creator gets a free tier so visitors can simply follow them.
+        createdTiers: { create: { name: "Follower", price: 0 } },
+      },
+    });
+    // The first creator owns the instance: they decide whether it hosts several creators.
+    await tx.instanceSetting.upsert({
+      where: { id: "instance" },
+      update: { ownerId: owner.id },
+      create: { id: "instance", ownerId: owner.id },
+    });
+    return owner;
   });
-  // The first creator owns the instance: they decide whether it hosts several creators.
-  await prisma.instanceSetting.upsert({
-    where: { id: "instance" },
-    update: { ownerId: user.id },
-    create: { id: "instance", ownerId: user.id },
-  });
-  await createSession(user.id);
+  if (created === "done") redirect("/login");
+  if (created === "taken") failAt("/setup", "That email is already registered.");
+  await createSession(created.id);
   redirect("/onboarding");
 }
 

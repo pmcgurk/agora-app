@@ -1,5 +1,5 @@
 import { activeSubscriptionWhere } from "@/lib/access";
-import { creatorPath } from "@/lib/creator";
+import { postPath } from "@/lib/creator";
 import { formatMoney } from "@/lib/currency";
 import { prisma } from "@/lib/prisma";
 import { absoluteUrl, emitEvent } from "@/lib/webhooks";
@@ -23,18 +23,17 @@ async function send(drafts: Draft[]): Promise<void> {
   }
 }
 
-const postHref = (creator: { id: string; slug: string | null }, postId: string) =>
-  `${creatorPath(creator)}/posts/${postId}`;
+const postHref = (creator: { id: string; slug: string | null }, post: { id: string; slug: string | null }) => postPath(creator, post);
 
 export async function notifyLike(postId: string, likerId: string): Promise<void> {
   const post = await prisma.post.findUnique({
     where: { id: postId },
-    select: { id: true, title: true, creator: { select: { id: true, slug: true, notifyLikes: true } } },
+    select: { id: true, slug: true, title: true, creator: { select: { id: true, slug: true, notifyLikes: true } } },
   });
   if (!post || post.creator.id === likerId) return;
   const liker = await prisma.user.findUnique({ where: { id: likerId }, select: { name: true } });
   emitEvent(post.creator.id, "like.created", {
-    post: { id: post.id, title: post.title, url: absoluteUrl(postHref(post.creator, post.id)) },
+    post: { id: post.id, title: post.title, url: absoluteUrl(await postHref(post.creator, post)) },
     user: { id: likerId, name: liker?.name ?? null },
   });
   if (!post.creator.notifyLikes) return;
@@ -43,7 +42,7 @@ export async function notifyLike(postId: string, likerId: string): Promise<void>
       userId: post.creator.id,
       type: "like",
       message: `${liker?.name ?? "Someone"} liked "${post.title}"`,
-      href: postHref(post.creator, post.id),
+      href: await postHref(post.creator, post),
     },
   ]);
 }
@@ -55,13 +54,13 @@ export async function notifyComment(commentId: string): Promise<void> {
       author: { select: { id: true, name: true } },
       parent: { select: { author: { select: { id: true, notifyReplies: true } } } },
       post: {
-        select: { id: true, title: true, creator: { select: { id: true, slug: true, notifyComments: true } } },
+        select: { id: true, slug: true, title: true, creator: { select: { id: true, slug: true, notifyComments: true } } },
       },
     },
   });
   if (!comment) return;
   const { post, author } = comment;
-  const href = `${postHref(post.creator, post.id)}#comments`;
+  const href = `${await postHref(post.creator, post)}#comments`;
   const drafts: Draft[] = [];
   emitEvent(post.creator.id, "comment.created", {
     comment: { id: comment.id, body: comment.body, parentId: comment.parentId },
@@ -135,6 +134,7 @@ export async function notifyNewPost(postId: string): Promise<void> {
     where: { id: postId },
     select: {
       id: true,
+      slug: true,
       title: true,
       isPublic: true,
       minTier: { select: { price: true, name: true } },
@@ -146,7 +146,7 @@ export async function notifyNewPost(postId: string): Promise<void> {
     post: {
       id: post.id,
       title: post.title,
-      url: absoluteUrl(postHref(post.creator, post.id)),
+      url: absoluteUrl(await postHref(post.creator, post)),
       visibility: post.isPublic ? "public" : (post.minTier?.name ?? "private"),
     },
   });
@@ -160,12 +160,13 @@ export async function notifyNewPost(postId: string): Promise<void> {
     select: { patronId: true },
   });
   const recipients = [...new Set(subscriptions.map((subscription) => subscription.patronId))];
+  const href = await postHref(post.creator, post);
   await send(
     recipients.map((userId) => ({
       userId,
       type: "post",
       message: `${post.creator.name} posted "${post.title}"`,
-      href: postHref(post.creator, post.id),
+      href,
     })),
   );
 }

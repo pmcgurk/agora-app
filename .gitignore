@@ -38,3 +38,5 @@ pnpm-debug.log*
 
 # Windows
 *.Identifier
+# Backups hold everything in the site, including password hashes and saved keys. Never commit them.
+/backups/

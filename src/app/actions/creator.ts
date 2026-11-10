@@ -24,7 +24,9 @@ import {
   syncDerivatives,
   type TeaserSettings,
 } from "@/lib/post-media";
-import { notifyNewPost, notifyRefund } from "@/lib/notifications";
+import { notifyRefund } from "@/lib/notifications";
+import { announceIfDue, isLive } from "@/lib/publishing";
+import { uniquePostSlug } from "@/lib/slugs";
 import { formatMoney } from "@/lib/currency";
 import { tipperLabel } from "@/lib/tips";
 import { emitEvent } from "@/lib/webhooks";
@@ -136,6 +138,24 @@ function parseItems(raw: string): MediaItem[] | string {
   return items;
 }
 
+// When the post goes live: straight away, never (a draft) or at a chosen moment. The browser sends the
+// moment as an ISO time, so the creator's time zone never needs guessing here.
+type Schedule = { kind: "now" } | { kind: "draft" } | { kind: "at"; at: Date };
+const MAX_SCHEDULE_AHEAD_MS = 2 * 365 * 24 * 60 * 60 * 1000;
+
+function readSchedule(formData: FormData): Schedule | string {
+  const when = text(formData, "when");
+  if (when === "draft") return { kind: "draft" };
+  if (when === "schedule") {
+    const at = new Date(text(formData, "publishAt"));
+    if (Number.isNaN(at.getTime())) return "Choose a date and time to publish.";
+    if (at.getTime() <= Date.now() + 60_000) return "Choose a time at least a minute from now.";
+    if (at.getTime() > Date.now() + MAX_SCHEDULE_AHEAD_MS) return "Posts can be scheduled up to two years ahead.";
+    return { kind: "at", at };
+  }
+  return { kind: "now" };
+}
+
 async function readPostForm(creatorId: string, formData: FormData) {
   const title = text(formData, "title");
   const textContent = text(formData, "textContent");
@@ -157,6 +177,8 @@ async function readPostForm(creatorId: string, formData: FormData) {
 
   const items = parseItems(text(formData, "media"));
   if (typeof items === "string") return items;
+  const schedule = readSchedule(formData);
+  if (typeof schedule === "string") return schedule;
 
   // Teasers only make sense on gated posts.
   const requestedSeconds = Math.floor(Number(text(formData, "previewSeconds")));
@@ -166,6 +188,7 @@ async function readPostForm(creatorId: string, formData: FormData) {
     isPublic,
     minTierId,
     items,
+    schedule,
     allowBlurPreview: !isPublic && formData.get("allowBlurPreview") === "on",
     clearThumbnail: !isPublic && formData.get("clearThumbnail") === "on",
     previewSeconds:
@@ -226,12 +249,14 @@ export async function createPost(_previous: PostFormState, formData: FormData): 
       data: {
         creatorId: user.id,
         title: form.title,
+        slug: await uniquePostSlug(user.id, form.title),
         textContent,
         isPublic: form.isPublic,
         minTierId: form.minTierId,
         allowBlurPreview: form.allowBlurPreview,
         clearThumbnail: form.clearThumbnail,
         previewSeconds: form.previewSeconds,
+        publishedAt: form.schedule.kind === "draft" ? null : form.schedule.kind === "at" ? form.schedule.at : new Date(),
         media: { create: media },
       },
     });
@@ -241,8 +266,14 @@ export async function createPost(_previous: PostFormState, formData: FormData): 
     await deleteObjects(created);
     return { error: "Could not publish the post. Check that the files are valid and try again." };
   }
-  await notifyNewPost(postId);
-  redirect("/dashboard/posts?notice=Post+published.");
+  // Only tells subscribers when the post is live; scheduled posts are announced when their time comes.
+  await announceIfDue(postId);
+  const done = {
+    now: "Post published.",
+    draft: "Draft saved. You'll find it under Drafts below. Only you can see it until you publish it.",
+    at: "Post scheduled. You'll find it under Scheduled below, and it goes live on its own.",
+  }[form.schedule.kind];
+  redirect(`/dashboard/posts?notice=${encodeURIComponent(done)}`);
 }
 
 export async function updatePost(_previous: PostFormState, formData: FormData): Promise<PostFormState> {
@@ -281,6 +312,10 @@ export async function updatePost(_previous: PostFormState, formData: FormData): 
     previewSeconds: form.previewSeconds,
     previewChanged: form.previewSeconds !== post.previewSeconds,
   };
+  // A live post stays live (and keeps its date) unless the creator moves it back to a draft or reschedules it.
+  const wasLive = isLive(post.publishedAt);
+  const publishedAt =
+    form.schedule.kind === "draft" ? null : form.schedule.kind === "at" ? form.schedule.at : wasLive ? post.publishedAt : new Date();
   const created: string[] = [];
   const obsolete: string[] = removed.flatMap(allKeysOf);
   try {
@@ -318,13 +353,17 @@ export async function updatePost(_previous: PostFormState, formData: FormData): 
         where: { id: post.id },
         data: {
           title: form.title,
+          // Until a post has been shown to anyone its address follows the title; after that it never changes.
+          ...(post.announcedAt === null && !isLive(post.publishedAt) ? { slug: await uniquePostSlug(user.id, form.title, post.id) } : {}),
           textContent,
           isPublic: form.isPublic,
           minTierId: form.minTierId,
           allowBlurPreview: form.allowBlurPreview,
           clearThumbnail: form.clearThumbnail,
           previewSeconds: form.previewSeconds,
-          editedAt: new Date(),
+          publishedAt,
+          // Only a post that was already live counts as "edited"; finishing a draft is not an edit.
+          ...(wasLive && publishedAt !== null && publishedAt <= new Date() ? { editedAt: new Date() } : {}),
         },
       }),
       prisma.postMedia.deleteMany({ where: { id: { in: removed.map((item) => item.id) } } }),
@@ -337,7 +376,13 @@ export async function updatePost(_previous: PostFormState, formData: FormData): 
     return { error: "Could not save the post. Check that the files are valid and try again." };
   }
   await deleteObjects(obsolete);
-  redirect("/dashboard/posts?notice=Post+saved.");
+  await announceIfDue(post.id);
+  const done = {
+    now: wasLive ? "Post saved." : "Post published.",
+    draft: "Saved as a draft. You'll find it under Drafts below. Only you can see it.",
+    at: "Post scheduled. You'll find it under Scheduled below, and it goes live on its own.",
+  }[form.schedule.kind];
+  redirect(`/dashboard/posts?notice=${encodeURIComponent(done)}`);
 }
 
 export async function deletePost(formData: FormData) {

@@ -1,5 +1,6 @@
 "use server";
 
+import { needsVerification } from "@/lib/account-email";
 import { blockInDemo } from "@/lib/demo-guard";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
@@ -19,6 +20,8 @@ export async function sendMessage(formData: FormData) {
   const toId = String(formData.get("to") ?? "");
   const body = String(formData.get("body") ?? "").trim();
   const fail = (message: string): never => redirect(`/messages/${toId}?error=${encodeURIComponent(message)}`);
+
+  if (await needsVerification(user)) fail("Confirm your email address first. We sent you a link, so check your inbox.");
 
   const recipient = await prisma.user.findUnique({ where: { id: toId } });
   if (!recipient || recipient.id === user.id || recipient.role === user.role) redirect("/messages");

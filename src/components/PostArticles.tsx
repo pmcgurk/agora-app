@@ -7,7 +7,8 @@ import ShareButton from "@/components/ShareButton";
 import { cardClass, linkClass } from "@/components/ui";
 import { canView, getAccessContext } from "@/lib/access";
 import { getCurrentUser } from "@/lib/auth";
-import { creatorPath } from "@/lib/creator";
+import { postPathFor } from "@/lib/creator";
+import { getSiteCreator } from "@/lib/instance";
 import type { FeedPost } from "@/lib/feed";
 import { prisma } from "@/lib/prisma";
 
@@ -21,7 +22,8 @@ export default async function PostArticles({
 }) {
   const viewer = await getCurrentUser();
   const access = await getAccessContext(creator.id, viewer);
-  const base = creatorPath(creator);
+  const isSite = (await getSiteCreator())?.id === creator.id;
+  const hrefOf = (post: { id: string; slug: string | null }) => postPathFor(creator, post, isSite);
   const liked = new Set(
     viewer && posts.length > 0
       ? (await prisma.postLike.findMany({ where: { userId: viewer.id, postId: { in: posts.map((post) => post.id) } }, select: { postId: true } })).map((like) => like.postId)
@@ -44,15 +46,15 @@ export default async function PostArticles({
         return (
           <article key={post.id} className={`${cardClass} agora-post`}>
             <h2 className="text-xl font-semibold">
-              <Link href={`${base}/posts/${post.id}`}>{post.title}</Link>
+              <Link href={hrefOf(post)}>{post.title}</Link>
             </h2>
             <p className="text-xs text-muted">
-              {post.createdAt.toISOString().slice(0, 10)}
+              {(post.publishedAt ?? post.createdAt).toISOString().slice(0, 10)}
               {!post.isPublic && ` · ${post.minTier ? `${post.minTier.name}+` : "private"}`}
               {unlocked ? "" : " · locked"}
             </p>
             {unlocked && post.textContent && (
-              <CollapsedText href={`${base}/posts/${post.id}`}>
+              <CollapsedText href={hrefOf(post)}>
                 <Markdown source={post.textContent} />
               </CollapsedText>
             )}
@@ -67,19 +69,19 @@ export default async function PostArticles({
                 />
               )}
               <Link
-                href={`${base}/posts/${post.id}#comments`}
+                href={`${hrefOf(post)}#comments`}
                 className="agora-comments-link inline-flex items-center gap-1.5 rounded-full border border-line px-3 py-1 hover:border-primary hover:text-primary"
               >
                 <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"><path d="M21 12a8 8 0 0 1-11.8 7L3 20.5l1.5-5.2A8 8 0 1 1 21 12z" /></svg>
                 {post._count.comments}
               </Link>
-              <ShareButton path={`${base}/posts/${post.id}`} title={post.title} />
+              <ShareButton path={hrefOf(post)} title={post.title} />
               {access.isOwner && (
                 <Link href={`/dashboard/posts/${post.id}/edit`} className="rounded-full border border-line px-3 py-1 hover:border-primary hover:text-primary">
                   Edit post
                 </Link>
               )}
-              <Link href={`${base}/posts/${post.id}`} className={`${linkClass} ml-auto`}>
+              <Link href={hrefOf(post)} className={`${linkClass} ml-auto`}>
                 {unlocked ? "View full post" : "View teaser"}
               </Link>
             </div>

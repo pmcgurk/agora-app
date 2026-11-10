@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-export type NavLink = { href: string; label: string };
+// badge: a small count shown beside the label, with a spoken description.
+export type NavLink = { href: string; label: string; badge?: { count: number; description: string } };
 export type NavGroup = { title: string; links: NavLink[]; collapsible?: boolean };
 
 // One sidebar for everything a creator manages: their content, their people, and the settings.
@@ -21,6 +22,15 @@ export default function CreatorNav({ groups }: { groups: NavGroup[] }) {
         className={`whitespace-nowrap rounded-theme px-3 py-2 ${active(link.href) ? "bg-primary text-on-primary" : "hover:bg-secondary"}`}
       >
         {link.label}
+        {link.badge && (
+          <span
+            title={link.badge.description}
+            aria-label={link.badge.description}
+            className={`ml-2 rounded-full px-2 py-0.5 text-xs font-semibold ${active(link.href) ? "bg-on-primary text-primary" : "bg-primary text-on-primary"}`}
+          >
+            {link.badge.count}
+          </span>
+        )}
       </Link>
     ));
 

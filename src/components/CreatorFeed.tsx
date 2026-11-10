@@ -4,6 +4,7 @@ import { after } from "next/server";
 import Flash from "@/components/Flash";
 import InfinitePosts from "@/components/InfinitePosts";
 import PostArticles from "@/components/PostArticles";
+import UnpublishedStrip from "@/components/UnpublishedStrip";
 import { cardClass, inputClass, linkClass, secondaryButtonClass } from "@/components/ui";
 import { activeSubscriptionWhere, getAccessContext } from "@/lib/access";
 import NewPostsBanner from "@/components/NewPostsBanner";
@@ -87,6 +88,8 @@ export default async function CreatorFeed({
         </section>
       )}
 
+      {access.isOwner && !query && pageNumber === 1 && <UnpublishedStrip creatorId={creator.id} />}
+
       {(posts.length > 0 || query) && (
         <form role="search" className="flex gap-2">
           <input
@@ -108,7 +111,7 @@ export default async function CreatorFeed({
         </p>
       )}
 
-      {!query && pageNumber === 1 && <NewPostsBanner key={posts[0]?.id ?? "none"} creatorId={creator.id} since={posts[0]?.createdAt.toISOString() ?? new Date().toISOString()} />}
+      {!query && pageNumber === 1 && <NewPostsBanner key={posts[0]?.id ?? "none"} creatorId={creator.id} since={(posts[0]?.publishedAt ?? posts[0]?.createdAt)?.toISOString() ?? new Date().toISOString()} />}
 
       <section aria-label="Posts" className="space-y-4">
         <PostArticles creator={creator} posts={posts} />

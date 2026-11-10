@@ -48,7 +48,7 @@ export default async function ApiDocs() {
   -H "Authorization: Bearer agora_your_key" \\
   -H "Content-Type: application/json" \\
   -d '{"title":"Hello","text":"First post","visibility":"public"}'`}</Code>
-        <p className="text-muted"><code>visibility</code> is <code>&quot;public&quot;</code> or a tier id (that tier and above can see it).</p>
+        <p className="text-muted"><code>visibility</code> is <code>&quot;public&quot;</code> or a tier id (that tier and above can see it). Optionally add <code>{'"status": "draft"'}</code> to save it unpublished, or <code>publishAt</code> (an ISO time in the future) to schedule it. Posts in the list show a <code>status</code> of <code>draft</code>, <code>scheduled</code> or <code>published</code>.</p>
         <Endpoint method="GET" path="/tiers">Your tiers. Prices are in minor units (cents).</Endpoint>
         <Endpoint method="GET" path="/members">Active followers and subscribers, including gifts.</Endpoint>
         <Endpoint method="GET" path="/stats">Followers, subscribers, estimated monthly revenue and per-tier numbers.</Endpoint>

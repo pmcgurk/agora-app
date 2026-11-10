@@ -1,6 +1,7 @@
 import sharp from "sharp";
 import type { Prisma, PrismaClient } from "../generated/prisma/client";
 import { hashPassword } from "./password";
+import { slugify } from "./slugify";
 import { objectExists, uploadObject } from "./s3";
 
 // Sample data for the public demo and for trying Agora locally: a fictional ceramics creator with
@@ -91,6 +92,7 @@ export async function writeDemoData(db: Prisma.TransactionClient, assets: DemoAs
       email: "maya@example.com",
       passwordHash,
       role: "CREATOR",
+      emailVerifiedAt: new Date(),
       slug: "maya-makes",
       tagline: "Handmade ceramics, one kiln load at a time",
       bio:
@@ -157,10 +159,10 @@ export async function writeDemoData(db: Prisma.TransactionClient, assets: DemoAs
   });
 
   const jordan = await db.user.create({
-    data: { name: "Jordan Lee", email: "jordan@example.com", passwordHash, role: "PATRON", onboardedAt: day(200) },
+    data: { name: "Jordan Lee", email: "jordan@example.com", passwordHash, role: "PATRON", emailVerifiedAt: new Date(), onboardedAt: day(200) },
   });
   const priya = await db.user.create({
-    data: { id: "demo-supporter-priya", name: "Priya Shah", email: "priya@example.com", passwordHash, role: "PATRON", onboardedAt: day(200) },
+    data: { id: "demo-supporter-priya", name: "Priya Shah", email: "priya@example.com", passwordHash, role: "PATRON", emailVerifiedAt: new Date(), onboardedAt: day(200) },
   });
   await db.subscription.create({ data: { patronId: jordan.id, tierId: makerClub.id, status: "ACTIVE", createdAt: day(90) } });
   await db.subscription.create({ data: { patronId: priya.id, tierId: studioFriend.id, status: "ACTIVE", createdAt: day(40) } });
@@ -183,10 +185,13 @@ export async function writeDemoData(db: Prisma.TransactionClient, assets: DemoAs
         id: input.id,
         creatorId: maya.id,
         title: input.title,
+        slug: slugify(input.title),
         textContent: input.text(inline.map((image) => image.id)),
         isPublic: input.isPublic,
         minTierId: input.tier?.id ?? null,
         createdAt: input.createdAt,
+        publishedAt: input.createdAt,
+        announcedAt: input.createdAt,
         media: {
           create: [...inline.map((image) => ({ ...image, inline: true })), ...gallery.map((image) => ({ ...image, inline: false }))].map(
             (image, position) => ({

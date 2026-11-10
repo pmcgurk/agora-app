@@ -1,5 +1,6 @@
 import { activeSubscriptionWhere } from "@/lib/access";
 import { prisma } from "@/lib/prisma";
+import { publishedWhere } from "@/lib/publishing";
 
 export async function getCreatorStats(creatorId: string) {
   const [tiers, subscriptions, postCount, mediaAggregate] = await Promise.all([
@@ -9,7 +10,7 @@ export async function getCreatorStats(creatorId: string) {
       orderBy: { createdAt: "desc" },
       include: { patron: { select: { id: true, name: true, email: true, avatarKey: true, bannerKey: true } }, tier: true },
     }),
-    prisma.post.count({ where: { creatorId } }),
+    prisma.post.count({ where: { creatorId, ...publishedWhere() } }),
     prisma.postMedia.aggregate({
       where: { post: { creatorId } },
       _count: true,

@@ -3,7 +3,7 @@
 import { usePathname } from "next/navigation";
 import type { CSSProperties, ReactNode } from "react";
 
-export const isAdminPath = (pathname: string) => /^\/(dashboard|settings|notifications|messages|login|signup)(\/|$)/.test(pathname);
+export const isAdminPath = (pathname: string) => /^\/(dashboard|settings|notifications|messages|login|signup|forgot-password|reset-password|verify-email)(\/|$)/.test(pathname);
 
 // Switches the whole page (header included) to the dark palette on admin and sign-in routes.
 export default function AdminScope({

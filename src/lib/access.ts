@@ -17,7 +17,7 @@ export type AccessContext = {
   blocked?: boolean;
 };
 
-type GatedPost = { isPublic: boolean; minTier: { price: number } | null };
+type GatedPost = { isPublic: boolean; minTier: { price: number } | null; publishedAt: Date | null };
 
 export async function getAccessContext(
   creatorId: string,
@@ -39,7 +39,10 @@ export async function getAccessContext(
 // Higher-priced tiers include everything in cheaper tiers of the same creator.
 // A non-public post without a valid tier is visible to its creator only.
 export function canView(post: GatedPost, access: AccessContext): boolean {
-  if (post.isPublic || access.isOwner) return true;
+  if (access.isOwner) return true;
+  // Drafts and scheduled posts are the creator's alone until their time comes.
+  if (post.publishedAt === null || post.publishedAt > new Date()) return false;
+  if (post.isPublic) return true;
   if (!post.minTier || access.maxActiveTierPrice === null) return false;
   return access.maxActiveTierPrice >= post.minTier.price;
 }

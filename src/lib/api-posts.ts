@@ -1,11 +1,14 @@
-import { creatorPath } from "@/lib/creator";
+import { postPathFor } from "@/lib/creator";
+import { postState } from "@/lib/publishing";
 import { absoluteUrl } from "@/lib/webhooks";
 
 type ApiPost = {
   id: string;
+  slug: string | null;
   title: string;
   textContent: string;
   createdAt: Date;
+  publishedAt: Date | null;
   editedAt: Date | null;
   isPublic: boolean;
   minTier: { id: string; name: string } | null;
@@ -13,16 +16,19 @@ type ApiPost = {
 };
 
 // Media is intentionally not linked: files are only served through the access-checked media route.
-export function serializePost(post: ApiPost, creator: { id: string; slug: string | null }) {
+export function serializePost(post: ApiPost, creator: { id: string; slug: string | null }, isSiteCreator: boolean) {
   return {
     id: post.id,
     title: post.title,
     text: post.textContent,
     createdAt: post.createdAt,
+    // draft, scheduled or published; publishedAt is null for drafts and in the future when scheduled.
+    status: postState(post),
+    publishedAt: post.publishedAt,
     editedAt: post.editedAt,
     visibility: post.isPublic ? "public" : post.minTier ? "tier" : "private",
     tier: post.minTier,
-    url: absoluteUrl(`${creatorPath(creator)}/posts/${post.id}`),
+    url: absoluteUrl(postPathFor(creator, post, isSiteCreator)),
     likes: post._count.likes,
     comments: post._count.comments,
     mediaFiles: post._count.media,

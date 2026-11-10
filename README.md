@@ -5,6 +5,9 @@ build direct relationships with their supporters. It aims to be a decentralized
 alternative to Patreon, Ko-fi, or similar creator-fan platforms with control over hosting, data,
 and presentation kept in the hands of each creator.
 
+Agora runs the author's own blog at <https://blog.mcgurk.dev>. [Deploying Agora](docs/deploying.md) explains how to run
+your own on any host.
+
 ## Stack
 
 - Next.js App Router and TypeScript
@@ -12,6 +15,7 @@ and presentation kept in the hands of each creator.
 - Prisma ORM and PostgreSQL 18
 - MinIO for S3-compatible media storage
 - Docker Compose for self-hosted deployment
+- Vitest for unit tests (`npm test`), run in CI with lint, type checks and a build
 
 ## Quick start
 
@@ -48,8 +52,11 @@ machine, copy `.env.example` to `.env` and:
   [Payments with Stripe](#payments-with-stripe)). Without a Stripe key, set
   `ALLOW_FREE_SUBSCRIPTIONS=false` on a public instance (it enables a test checkout
   that takes no payment);
-- to deploy on Render, follow [Run Agora on Render](docs/deploy-render.md); it comes with a ready-made
-  blueprint, [`render.yaml`](render.yaml);
+- **to go live, follow [Deploying Agora](docs/deploying.md)**: what it needs and how to run it on any host, with a
+  ready-made [Docker Compose + Caddy setup](docker-compose.prod.yml) for one server and a
+  [Render guide](docs/deploy-render.md) (blueprint: [`render.yaml`](render.yaml));
+- set `SETUP_TOKEN` on any public server: setup then asks for it, so nobody else can claim the site first;
+- set up [backups](docs/backups.md) and run the restore drill once;
 - put Agora behind an HTTPS reverse proxy. With an `https://` `NEXT_PUBLIC_BASE_URL`
   the container refuses to start with the default development passwords, and
   MinIO's admin console (port 9001) is only published on `127.0.0.1`.
@@ -93,8 +100,9 @@ Agora creates a Stripe Product/Price for each paid tier on first use (and a new
 Price when you change the amount or currency), sends patrons to Stripe Checkout,
 and keeps plans in sync from webhooks. Ending a paid plan keeps access until the end of
 the paid period; refunds issued from the Members page are real Stripe refunds. Card
-data never touches Agora. The Stripe integration has been exercised against a mock
-Stripe API, not a live account, so test it in Stripe test mode before going live.
+data never touches Agora. Checkout, tips and webhooks have been run end to end in Stripe test
+mode (with the Stripe CLI forwarding events to a local server), and the webhook handler has automated
+tests. Repeat a payment in test mode on your own setup before going live.
 
 ### Testing locally
 
@@ -128,8 +136,8 @@ content is not "electronically supplied services" (for example physical goods), 
 
 ## Email
 
-Agora has an email framework for outgoing messages. For now a single-creator site only sends the
-test message; notification emails will build on it. Set it up
+Agora has an email framework for outgoing messages. It sends password reset links, email confirmation links
+and the test message. Notification emails (for new posts and member events) are planned and will build on it. Set it up
 in **Settings → Email** (owner only). Enter any SMTP server, press *Test connection and save*, and
 send yourself a test. Settings saved there take precedence over environment variables, so changing
 them needs no redeploy.
@@ -145,7 +153,37 @@ MAIL_PASSWORD=...
 MAIL_FROM=hello@example.com
 ```
 
-Without any mail settings, Agora still works. Passwords for the mail server are stored in the database, like the Stripe key.
+Without any mail settings, Agora still works: nobody is asked to confirm their email (they could not), and the
+"forgot password" page explains how to get help. Passwords for the mail server are stored in the database, like the Stripe key.
+
+### Passwords and email confirmation
+
+- **Forgot password:** with email set up, the log-in page offers a reset link: single-use, valid for an hour, and
+  signing every device out when used. Asking gives the same answer whether or not the address has an account.
+- **Email confirmation:** with email set up, new member accounts confirm their address before they can comment or
+  message (a banner asks them to). Existing accounts, the owner and invited or approved creators count as confirmed.
+
+## Recovering access
+
+If the owner is locked out, or the site cannot send email, anyone with access to the server can print a one-hour
+reset link for an account:
+
+```sh
+docker compose exec app npx tsx prisma/reset-link.ts you@example.com   # Docker Compose
+npm run reset-link -- you@example.com                                   # a plain checkout (set DATABASE_URL)
+```
+
+Open the link it prints, choose a new password, and log in. For a lost *database*, see [Backups](docs/backups.md).
+
+## Tests
+
+```sh
+npm test            # unit tests (Vitest): access rules, publishing, feed search, Stripe webhooks, auth, feeds
+npm run typecheck
+npm run lint
+```
+
+They need no database or network. CI runs them on every push and pull request, along with a build and `npm audit`.
 
 ## Screenshots
 
@@ -229,6 +267,19 @@ Every demo account uses the password `demo-password`.
 - Patrons can search a creator's posts. Titles are always searched; post text only in posts the
   searcher can open, so a search never reveals what is inside a locked post.
 - Creators see an "Edit post" button on their own posts, in the feed and on the post page.
+- Drafts and scheduled posts: when writing a post the creator chooses to publish now, schedule it for a later
+  date and time (in their own time zone), or save it as a draft. Drafts and scheduled posts are visible only
+  to the creator, in the Posts list and by direct link, and never appear in feeds, search, the API for
+  others or the media endpoint. A scheduled post goes live on its own and subscribers and webhooks are
+  told then, within about a minute (a timer inside the server does this, so run a single long-lived
+  instance, not a serverless platform). The API accepts `status: "draft"` and `publishAt` too.
+- The browser-tab icon is the creator's profile picture (a tile with their initial until they add one).
+- Blog basics: posts have readable addresses (`/posts/my-first-post` on a single-creator site; older addresses redirect),
+  link previews (title, description, picture) for public posts, an RSS feed at `/feed.xml` with the full text of public
+  posts, a `/sitemap.xml` and a `/robots.txt`. Members-only posts, drafts and scheduled posts never appear in any of them.
+- First-run setup can be locked with `SETUP_TOKEN` and cannot create two owners; see [SECURITY.md](SECURITY.md) for what
+  Agora does to protect a public site and its known limits.
+- Backups, a restore drill and a restore for any host: [Backups](docs/backups.md).
 - Custom thank-you messages: one per tier (shown after someone joins) and one for tips (Settings → Payments).
 - The setup wizard walks through connecting Stripe (API key, webhook, payouts) if it isn't connected yet.
 - Switching tier replaces the old plan: the previous plan is ended straight away (and cancelled in Stripe),
@@ -264,18 +315,19 @@ promised; items move up when someone needs them. Contributions welcome (see
 
 ### Payments (highest priority)
 
-- [ ] End-to-end test of Stripe Checkout in Stripe test mode: subscribe, tip, end plan, refund,
-      and webhook retries. The current integration has only been exercised against a mock API.
-- [ ] Automated tests for the webhook handler (signature failure, duplicate events, handler failure
+- [x] Stripe Checkout exercised end to end in Stripe test mode (run locally with the Stripe CLI).
+- [ ] Repeatable end-to-end tests of Stripe flows (subscribe, tip, end plan, refund, webhook retries) in CI.
+- [x] Automated tests for the webhook handler (signature failure, duplicate events, handler failure
       releasing the event claim) and for the access rules (`canView`, tier price comparisons).
 - [ ] Handle `invoice.payment_failed` grace periods and tell patrons when a card is failing.
 - [ ] Tax and VAT options beyond the default product tax code (see Managed Payments above), a setting for the tax code, and per-creator payout reporting (CSV export of payments and refunds).
 
 ### Email
 
-- [ ] Plug in an email service (SMTP first, then Postmark/SES/Resend adapters) behind a single
-      `lib/mail.ts` interface, configured via environment variables.
-- [ ] Email verification at sign-up and password reset links (time-limited, single use).
+- [x] SMTP behind a single `lib/mail.ts` interface, configured in Settings or by environment variables.
+- [ ] Provider API adapters (Postmark, SES, Resend). Their SMTP endpoints already work.
+- [x] Email verification at sign-up and password reset links (time-limited, single use).
+- [ ] Let members change their email address (with confirmation), and add "delete my account".
 - [ ] Notification emails for new posts and member events, with a per-user opt-in (the notification
       preferences already exist).
 - [ ] Receipts and refund confirmations for patrons.
@@ -291,7 +343,9 @@ promised; items move up when someone needs them. Contributions welcome (see
 
 ### Creator tools
 
-- [ ] Scheduled posts and draft previews shared by link.
+- [x] Drafts and scheduled posts.
+- [ ] Draft previews shared by a private link.
+- [ ] Post addresses the creator can edit, and an Open Graph picture generated for posts without one.
 - [ ] Bulk actions on the Members page (message, gift or remove several members).
 - [ ] Creator-to-member broadcast messages.
 - [ ] Post search and tags; sort and filter on the Posts page.
@@ -299,7 +353,8 @@ promised; items move up when someone needs them. Contributions welcome (see
 
 ### Patron experience
 
-- [ ] Pagination or infinite scroll on the feed and comments.
+- [x] Pagination or infinite scroll on the feed.
+- [ ] Pagination for long comment threads (a post shows its first 200 comments).
 - [ ] Email or in-app "new post" digest instead of only notifications.
 - [ ] Downloadable receipts and an export of a patron's own data.
 
@@ -307,7 +362,8 @@ promised; items move up when someone needs them. Contributions welcome (see
 
 - [ ] More built-in presets and a visual theme gallery.
 - [ ] Separate light and dark palettes for a custom theme, following the visitor's system setting.
-- [ ] Custom domains with automatic HTTPS, documented per reverse proxy.
+- [ ] Custom domains with automatic HTTPS, documented per reverse proxy. Caddy (Compose) and Render are
+      documented; nginx and Traefik are not.
 - [ ] An accessibility pass: colour contrast checks in the colour editor, keyboard focus styles,
       and screen-reader labels on the analytics chart and tables.
 - [ ] Mobile pass over the dashboard tables (Tiers and Analytics are tight at phone width; a stacked
@@ -315,20 +371,25 @@ promised; items move up when someone needs them. Contributions welcome (see
 
 ### Security and operations
 
-- [ ] Nonce-based Content Security Policy so `script-src` no longer needs `'unsafe-inline'`.
+- [x] Nonce-based Content Security Policy for scripts. Styles still allow inline rules (theming and Next.js).
+- [x] Webhooks may only call public addresses (opt out with `WEBHOOK_ALLOW_PRIVATE=true`).
 - [ ] A scoped MinIO user for the app instead of the root account; document the policy.
 - [ ] Pin the MinIO image by digest and offer the official image as an option once available.
 - [ ] Rate limits that survive restarts and work across several instances (shared store).
 - [ ] Account lockout messaging that doesn't reveal whether an email is registered.
-- [ ] Atomic first-run setup, so two simultaneous requests can't create two creators.
-- [ ] Automated backups of Postgres and MinIO, with a documented restore drill.
-- [ ] Run `npm audit` and dependency updates on a schedule (Dependabot).
+- [x] Atomic, token-protected first-run setup (`SETUP_TOKEN`).
+- [x] Backups of Postgres and the media bucket, with a restore drill and a restore, for any host (scheduling is up to the
+      operator; see the backups guide).
+- [x] `npm audit` in CI and dependency updates through Dependabot.
+- [ ] Encrypt Stripe and SMTP credentials stored in the database with a key from the environment.
+- [ ] Stop sign-up revealing whether an email is registered (now that confirmation emails exist).
+- [ ] Clear the moderate advisories in the lint tooling once the ESLint ecosystem has fixes.
 
 ### Engineering
 
-- [ ] A test suite in CI (unit tests for access and payment rules, end-to-end tests for signup,
-      posting, subscribing and tipping).
-- [ ] Health endpoint for monitoring (the container healthcheck currently just requests `/`).
+- [x] A unit test suite in CI (access and payment rules, publishing, feeds, auth, webhooks).
+- [ ] End-to-end browser tests in CI for sign-up, posting, subscribing and tipping.
+- [x] Health endpoint for monitoring (`/api/health`, answers 503 when the database is unreachable), used by the container healthcheck.
 - [ ] Structured logging with request IDs.
 - [ ] Prebuilt container image published to a registry, so self-hosters don't need to build.
 - [ ] Multi-stage Docker build to drop dev dependencies from the runtime image.

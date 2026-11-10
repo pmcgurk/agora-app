@@ -40,6 +40,9 @@ model User {
   name             String
   email            String           @unique
   passwordHash     String
+  // Set once the address is confirmed (by link, or because a trusted flow already proved it).
+  emailVerifiedAt  DateTime?
+  emailTokens      EmailToken[]
   role             Role
   themeName        String           @default("default")
   themeSettings    Json?
@@ -170,6 +173,13 @@ model Post {
   // When false, viewers without access see a blurred video thumbnail instead of a clear one.
   clearThumbnail   Boolean       @default(false)
   editedAt         DateTime?
+  // null = draft, in the future = scheduled, in the past = published. Defaults to now, so posts made any
+  // other way (the API, seeding) are published straight away.
+  publishedAt      DateTime?     @default(now())
+  // When subscribers and webhooks were told about the post; null until then.
+  announcedAt      DateTime?
+  // The readable part of the post address, unique per creator. Posts opened by id still work.
+  slug             String?
   comments         Comment[]
   likes            PostLike[]
   views            PostViewDay[]
@@ -178,6 +188,9 @@ model Post {
   media            PostMedia[]
   creator          User          @relation("CreatorPosts", fields: [creatorId], references: [id], onDelete: Cascade)
   minTier          Tier?         @relation("MinimumTier", fields: [minTierId], references: [id], onDelete: SetNull)
+
+  @@unique([creatorId, slug])
+  @@index([creatorId, publishedAt])
 }
 
 // Files live in MinIO only (Rule 1); this table stores object keys, never file contents.
@@ -446,4 +459,24 @@ model WaitlistEntry {
   id        String   @id @default(cuid())
   email     String   @unique
   createdAt DateTime @default(now())
+}
+
+enum EmailTokenKind {
+  PASSWORD_RESET
+  VERIFY_EMAIL
+}
+
+// A single-use link sent by email. Only a hash of the token is stored, so a database leak cannot be
+// used to reset anyone's password.
+model EmailToken {
+  id        String         @id @default(cuid())
+  userId    String
+  kind      EmailTokenKind
+  tokenHash String         @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime       @default(now())
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, kind])
 }

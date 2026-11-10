@@ -16,6 +16,9 @@ export type ExistingPost = {
   previewSeconds: number | null;
   allowBlurPreview: boolean;
   clearThumbnail: boolean;
+  // Where the post is in its life: not yet published, waiting for its time, or live.
+  state: "draft" | "scheduled" | "published";
+  publishedAt: string | null;
   media: { id: string; kind: MediaKindName; fileName?: string | null; inline: boolean }[];
 };
 
@@ -36,6 +39,23 @@ type Item = {
 };
 
 const MAX_PARALLEL_UPLOADS = 3;
+
+type When = "now" | "schedule" | "draft";
+
+// <input type="datetime-local"> wants "YYYY-MM-DDTHH:mm" in the viewer's own time zone.
+function toLocalInput(date: Date): string {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+// The scheduled time if there is one, otherwise tomorrow at nine.
+function initialLocalTime(post?: ExistingPost): string {
+  if (post?.state === "scheduled" && post.publishedAt) return toLocalInput(new Date(post.publishedAt));
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  tomorrow.setHours(9, 0, 0, 0);
+  return toLocalInput(tomorrow);
+}
 
 // Step 1: ask the app for a presigned PUT URL. Step 2: send the bytes straight to MinIO.
 function uploadFile(
@@ -86,6 +106,8 @@ export default function PostComposer({ tiers, post }: { tiers: Tier[]; post?: Ex
     })),
   );
   const [visibility, setVisibility] = useState(post?.visibility ?? "public");
+  const [when, setWhen] = useState<When>(post?.state === "draft" ? "draft" : post?.state === "scheduled" ? "schedule" : "now");
+  const [localTime, setLocalTime] = useState(() => initialLocalTime(post));
   const [dragging, setDragging] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const aborts = useRef(new Map<string, () => void>());
@@ -178,6 +200,11 @@ export default function PostComposer({ tiers, post }: { tiers: Tier[]; post?: Ex
   const hasVideo = items.some((item) => item.kind === "VIDEO");
   const busy = items.some((item) => item.status === "queued" || item.status === "uploading");
   const failed = items.some((item) => item.status === "error");
+  const isLiveNow = post?.state === "published";
+  const publishAt = (() => {
+    const date = new Date(localTime);
+    return Number.isNaN(date.getTime()) ? "" : date.toISOString();
+  })();
   const mediaList = items
     .filter((item) => item.status === "done")
     // ref links an inline image's placeholder in the text to its upload; the server swaps it for the media address.
@@ -317,10 +344,53 @@ export default function PostComposer({ tiers, post }: { tiers: Tier[]; post?: Ex
         </label>
       )}
 
+      <fieldset className="space-y-2">
+        <legend className="font-medium">When to publish</legend>
+        <label className="flex items-center gap-2">
+          <input type="radio" name="when" value="now" checked={when === "now"} onChange={() => setWhen("now")} />
+          {isLiveNow ? "Published (keep it live)" : "Publish now"}
+        </label>
+        <label className="flex items-center gap-2">
+          <input type="radio" name="when" value="schedule" checked={when === "schedule"} onChange={() => setWhen("schedule")} />
+          Schedule for later
+        </label>
+        {when === "schedule" && (
+          <div className="ml-6 space-y-1">
+            <input
+              type="datetime-local"
+              aria-label="Publish date and time"
+              required
+              value={localTime}
+              onChange={(event) => setLocalTime(event.target.value)}
+              suppressHydrationWarning
+              className={`${inputClass} max-w-xs`}
+            />
+            <p className="text-sm text-muted">In your own time zone. It goes live on its own, and followers are told then.</p>
+          </div>
+        )}
+        <label className="flex items-center gap-2">
+          <input type="radio" name="when" value="draft" checked={when === "draft"} onChange={() => setWhen("draft")} />
+          {isLiveNow ? "Move back to a draft (hides it from everyone)" : "Save as a draft (only you can see it)"}
+        </label>
+        <input type="hidden" name="publishAt" value={publishAt} />
+      </fieldset>
+
       <input type="hidden" name="media" value={JSON.stringify(mediaList)} />
       {state.error && <p role="alert" className="text-danger">{state.error}</p>}
       <button className={buttonClass} disabled={pending || busy || failed}>
-        {pending ? "Saving…" : busy ? "Waiting for uploads…" : failed ? "Fix failed uploads" : post ? "Save changes" : "Publish"}
+        {pending
+          ? "Saving…"
+          : busy
+            ? "Waiting for uploads…"
+            : failed
+              ? "Fix failed uploads"
+              : when === "draft"
+                ? "Save draft"
+                : when === "schedule"
+                  ? "Schedule post"
+                  : isLiveNow
+                    ? "Save changes"
+                    : "Publish"}
       </button>
     </form>
   );

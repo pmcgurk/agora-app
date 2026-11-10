@@ -52,6 +52,11 @@ services:
       - key: ALLOW_FREE_SUBSCRIPTIONS
         value: "false"
 
+      # Render makes a random value for this. Setup (/setup) asks for it, so nobody else can claim your
+      # site before you do. Read it under the service's Environment tab.
+      - key: SETUP_TOKEN
+        generateValue: true
+
       # Optional, set in the Render dashboard if you prefer configuration as code. The site owner can
       # also enter all of these inside Agora (Settings > Payments and Settings > Email):
       #   STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET

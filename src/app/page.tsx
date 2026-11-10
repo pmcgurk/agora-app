@@ -6,6 +6,7 @@ import CreatorShell from "@/components/CreatorShell";
 import Logo from "@/components/Logo";
 import PoweredBy from "@/components/PoweredBy";
 import { SiteHeader } from "@/components/SiteHeader";
+import VerifyBanner from "@/components/VerifyBanner";
 import { isAdminDark } from "@/lib/admin-mode";
 import { creatorPath } from "@/lib/creator";
 import { getSiteCreator, needsSetup, requireInstanceAccess } from "@/lib/instance";
@@ -44,6 +45,7 @@ export default async function Home({
   return (
     <AdminScope dark={dark} darkStyle={adminDarkStyle()}>
     <SiteHeader />
+    <VerifyBanner />
     <main className="mx-auto max-w-2xl space-y-8 px-4 py-16">
       <header className="text-center">
         <h1><Logo className="text-6xl" /></h1>

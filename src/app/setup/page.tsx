@@ -5,6 +5,7 @@ import Logo from "@/components/Logo";
 import WizardSteps from "@/components/WizardSteps";
 import { buttonClass, cardClass, inputClass } from "@/components/ui";
 import { isDemoMode } from "@/lib/demo";
+import { setupLooksPublicAndOpen, setupTokenRequired } from "@/lib/setup-token";
 import { needsSetup } from "@/lib/instance";
 import { WIZARD_STEPS } from "@/lib/profile-fields";
 
@@ -34,6 +35,12 @@ export default async function SetupPage({
             saved, and you&apos;ll be signed in as the fictional demo creator for the next steps.
           </p>
         )}
+        {!demo && setupLooksPublicAndOpen() && (
+          <p role="note" className="rounded-theme bg-secondary p-3 text-sm">
+            <strong>Heads up:</strong> the first person to finish this form owns the site, and this page is open to anyone who can reach
+            it. If you are not setting up right now, set a <code>SETUP_TOKEN</code> in the server&apos;s environment to lock it.
+          </p>
+        )}
         <form action={setupInstance} className="space-y-3">
           <label className="block">
             Your name
@@ -47,6 +54,13 @@ export default async function SetupPage({
             Password (10+ characters)
             <input name="password" type="password" required minLength={10} autoComplete="new-password" className={inputClass} />
           </label>
+          {!demo && setupTokenRequired() && (
+            <label className="block">
+              Setup token
+              <input name="setupToken" type="password" required autoComplete="off" className={inputClass} />
+              <span className="block text-sm text-muted">The SETUP_TOKEN value from this server&apos;s environment. It proves you run this site.</span>
+            </label>
+          )}
           <button className={`${buttonClass} w-full`}>Create account</button>
         </form>
       </section>

@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { linkClass } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
-import { creatorPath } from "@/lib/creator";
+import { postPathFor } from "@/lib/creator";
+import { getSiteCreator } from "@/lib/instance";
 import { prisma } from "@/lib/prisma";
 import { getViewAnalytics } from "@/lib/views";
 
@@ -14,12 +15,13 @@ function formatDay(day: string): string {
 
 export default async function AnalyticsPage() {
   const user = await requireUser("CREATOR");
+  const isSite = (await getSiteCreator())?.id === user.id;
   const [views, posts] = await Promise.all([
     getViewAnalytics(user.id),
     prisma.post.findMany({
       where: { creatorId: user.id },
       orderBy: { createdAt: "desc" },
-      select: { id: true, title: true, _count: { select: { likes: true, comments: true } } },
+      select: { id: true, slug: true, title: true, _count: { select: { likes: true, comments: true } } },
     }),
   ]);
   const peak = Math.max(1, ...views.daily.map((day) => day.profile + day.posts));
@@ -80,7 +82,7 @@ export default async function AnalyticsPage() {
           {posts.map((post) => (
             <tr key={post.id} className="border-t border-line">
               <td className="py-1.5">
-                <Link href={`${creatorPath(user)}/posts/${post.id}`} className={linkClass}>{post.title}</Link>
+                <Link href={postPathFor(user, post, isSite)} className={linkClass}>{post.title}</Link>
               </td>
               <td>{views.perPostTotal.get(post.id) ?? 0}</td>
               <td>{post._count.likes}</td>

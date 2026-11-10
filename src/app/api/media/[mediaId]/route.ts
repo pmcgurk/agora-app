@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { isPrivateInstance } from "@/lib/instance";
 import { ensureVideoThumbnails } from "@/lib/post-media";
 import { prisma } from "@/lib/prisma";
+import { isLive } from "@/lib/publishing";
 import { generatePresignedUrl, streamObject } from "@/lib/s3";
 
 const PRESIGNED_URL_TTL_SECONDS = 60;
@@ -29,6 +30,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ medi
   });
   if (!media) return new NextResponse(null, { status: 404 });
   const { post } = media;
+  // Files of drafts and scheduled posts are served to the creator only.
+  if (!isLive(post.publishedAt)) {
+    const access = await getAccessContext(post.creatorId, await getCurrentUser());
+    if (!access.isOwner) return new NextResponse(null, { status: 404 });
+  }
 
   let objectKey: string | null = null;
   if (variant === "blur") {
