@@ -1,4 +1,4 @@
-FROM node:22-alpine
+FROM node:26-alpine
 
 # OpenSSL: Prisma's schema engine. ffmpeg: cuts free video previews. A font: lets the favicon draw a
 # creator's initial.
