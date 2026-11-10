@@ -1,0 +1,52 @@
+name: Version
+
+# Every push to main gets the next version: the patch number in package.json goes up by one, the commit is
+# tagged vX.Y.Z, and a GitHub release is created from the merged work. The footer of the site and /api/health
+# show the version, so you can tell which build is running. Change the major or minor number by editing
+# package.json in a pull request (for example 0.1.9 to 0.2.0); the next push continues from there.
+#
+# The bump is committed straight to main. If main is protected and requires pull requests, allow the
+# github-actions bot to bypass that rule (Settings > Branches), or this workflow cannot push.
+
+on:
+  push:
+    branches: [main]
+
+# One at a time, in order, and never cancelled halfway.
+concurrency:
+  group: version
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    # The bump commit is made by this workflow; do not bump for it.
+    if: ${{ !startsWith(github.event.head_commit.message, 'chore(release)') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Bump the patch version
+        id: bump
+        run: |
+          npm version patch --no-git-tag-version
+          echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Commit, tag and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+          git commit -m "chore(release): v${{ steps.bump.outputs.version }} [skip ci]"
+          git tag "v${{ steps.bump.outputs.version }}"
+          git push origin main "v${{ steps.bump.outputs.version }}"
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "v${{ steps.bump.outputs.version }}" --generate-notes --title "v${{ steps.bump.outputs.version }}"
