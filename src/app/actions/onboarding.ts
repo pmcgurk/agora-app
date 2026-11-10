@@ -8,6 +8,7 @@ import { hashPassword } from "@/lib/password";
 import { paymentMode, STRIPE_KEY_PATTERN, STRIPE_WEBHOOK_SECRET_PATTERN } from "@/lib/payments";
 import { prisma } from "@/lib/prisma";
 import { clientIp, withinLimit } from "@/lib/rate-limit";
+import { encryptSecret } from "@/lib/secrets";
 import { setupTokenMatches } from "@/lib/setup-token";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -130,7 +131,10 @@ export async function saveOnboardingStripe(formData: FormData) {
   if (webhookSecret && !STRIPE_WEBHOOK_SECRET_PATTERN.test(webhookSecret)) failAt(path, "The webhook signing secret should start with whsec_.");
   // The demo checks the keys like the real thing but never stores them.
   if (isDemoMode()) redirect(`${path}&notice=${encodeURIComponent("Demo: in a real site that connects Stripe. Nothing was saved.")}`);
-  const data = { stripeSecretKey: secretKey, ...(webhookSecret ? { stripeWebhookSecret: webhookSecret } : {}) };
+  const data = {
+    stripeSecretKey: encryptSecret(secretKey, "stripeSecretKey"),
+    ...(webhookSecret ? { stripeWebhookSecret: encryptSecret(webhookSecret, "stripeWebhookSecret") } : {}),
+  };
   await prisma.instanceSetting.upsert({ where: { id: "instance" }, update: data, create: { id: "instance", ...data } });
   redirect(`${path}&notice=${encodeURIComponent("Stripe connected.")}`);
 }

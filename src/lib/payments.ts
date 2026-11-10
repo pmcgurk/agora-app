@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { isDemoMode } from "@/lib/demo";
 import { prisma } from "@/lib/prisma";
+import { decryptSecret } from "@/lib/secrets";
 
 export type PaymentMode = "stripe" | "test" | "off";
 
@@ -22,10 +23,12 @@ export const getStripeConfig = cache(async (): Promise<StripeConfig> => {
     where: { id: "instance" },
     select: { stripeSecretKey: true, stripeWebhookSecret: true },
   });
-  if (row?.stripeSecretKey && STRIPE_KEY_PATTERN.test(row.stripeSecretKey)) {
+  // Saved keys are encrypted when APP_SECRET is set. One that cannot be read counts as not saved.
+  const savedKey = decryptSecret(row?.stripeSecretKey, "stripeSecretKey");
+  if (savedKey && STRIPE_KEY_PATTERN.test(savedKey)) {
     return {
-      secretKey: row.stripeSecretKey,
-      webhookSecret: row.stripeWebhookSecret ?? process.env.STRIPE_WEBHOOK_SECRET ?? null,
+      secretKey: savedKey,
+      webhookSecret: decryptSecret(row?.stripeWebhookSecret, "stripeWebhookSecret") ?? process.env.STRIPE_WEBHOOK_SECRET ?? null,
       source: "settings",
     };
   }

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { clearMailSettings, sendTestMail } from "@/app/actions/mail";
+import CredentialNotice from "@/components/CredentialNotice";
 import Flash from "@/components/Flash";
 import MailSettingsForm from "@/components/MailSettingsForm";
 import { cardClass, secondaryButtonClass } from "@/components/ui";
@@ -33,6 +34,7 @@ export default async function EmailSettings({
         </p>
       </div>
       <Flash notice={notice} error={error} />
+      <CredentialNotice />
 
       <div className={`${cardClass} p-4 text-sm`}>
         {source === "database" && <p>Sending with the settings saved here.</p>}

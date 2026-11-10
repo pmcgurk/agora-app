@@ -12,6 +12,7 @@ import { DEMO_OFF, isDemoMode } from "@/lib/demo";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { paymentMode, STRIPE_KEY_PATTERN, STRIPE_WEBHOOK_SECRET_PATTERN, stripeConfigured } from "@/lib/payments";
 import { prisma } from "@/lib/prisma";
+import { encryptSecret } from "@/lib/secrets";
 import { SLUG_PATTERN } from "@/lib/profile-fields";
 import { setInstancePrivate } from "@/lib/instance";
 import { DEFAULT_PAGE_SIZE, FEED_PAGE_SIZES } from "@/lib/feed";
@@ -237,8 +238,8 @@ export async function saveStripeKeys(formData: FormData) {
 
   // Blank fields keep the saved value, so the stored secrets never need to be shown again.
   const data = {
-    ...(secretKey ? { stripeSecretKey: secretKey } : {}),
-    ...(webhookSecret ? { stripeWebhookSecret: webhookSecret } : {}),
+    ...(secretKey ? { stripeSecretKey: encryptSecret(secretKey, "stripeSecretKey") } : {}),
+    ...(webhookSecret ? { stripeWebhookSecret: encryptSecret(webhookSecret, "stripeWebhookSecret") } : {}),
   };
   await prisma.instanceSetting.upsert({
     where: { id: "instance" },

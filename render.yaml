@@ -57,6 +57,11 @@ services:
       - key: SETUP_TOKEN
         generateValue: true
 
+      # Render makes a random value for this too. It encrypts the Stripe keys and SMTP password you save in
+      # Settings. Do not change or delete it afterwards, or saved keys must be entered again.
+      - key: APP_SECRET
+        generateValue: true
+
       # Optional, set in the Render dashboard if you prefer configuration as code. The site owner can
       # also enter all of these inside Agora (Settings > Payments and Settings > Email):
       #   STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET
