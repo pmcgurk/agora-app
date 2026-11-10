@@ -1,6 +1,42 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
+
+/* Every colour utility is backed by a --theme-* CSS variable, which a creator's page can override. `inline` makes the
+   utilities read the variable where they are used instead of copying its value here. Opacity modifiers
+   (bg-primary/30) are handled by Tailwind with color-mix. */
+@theme inline {
+  --color-primary: var(--theme-primary);
+  --color-on-primary: var(--theme-on-primary);
+  --color-secondary: var(--theme-secondary);
+  --color-background: var(--theme-background);
+  --color-surface: var(--theme-surface);
+  --color-text: var(--theme-text);
+  --color-muted: var(--theme-muted);
+  --color-line: var(--theme-border);
+  --color-danger: var(--theme-danger);
+  --color-success: var(--theme-success);
+
+  --radius-theme: var(--theme-radius);
+
+  --font-heading: var(--theme-font-heading);
+}
+
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+}
 
 :root {
   --theme-primary: #6d28d9;

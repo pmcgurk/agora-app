@@ -54,7 +54,7 @@ export default function ColourEditor({ initial, initialRadius }: { initial: Colo
               aria-label={field.label}
               value={colours[field.key] ?? "#000000"}
               onChange={(event) => setColours((current) => ({ ...current, [field.key]: event.target.value }))}
-              className="h-9 w-14 cursor-pointer rounded border border-line bg-transparent p-0"
+              className="h-9 w-14 cursor-pointer rounded-sm border border-line bg-transparent p-0"
             />
           </label>
         ))}

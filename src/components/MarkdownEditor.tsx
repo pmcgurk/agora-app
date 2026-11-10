@@ -194,7 +194,7 @@ export default function MarkdownEditor({
                 aria-label={button.label}
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => apply(button.tool)}
-                className="min-w-8 rounded px-2 py-1 text-sm hover:bg-secondary"
+                className="min-w-8 rounded-sm px-2 py-1 text-sm hover:bg-secondary"
               >
                 {button.content}
               </button>
@@ -204,7 +204,7 @@ export default function MarkdownEditor({
               type="button"
               title="Insert images into the text"
               onClick={() => picker.current?.click()}
-              className="rounded px-2 py-1 text-sm hover:bg-secondary"
+              className="rounded-sm px-2 py-1 text-sm hover:bg-secondary"
             >
               Image
             </button>

@@ -42,7 +42,7 @@ export async function SiteHeader() {
         {user ? (
           <>
             {user.role === "CREATOR" && (
-              <Link href="/dashboard/posts/new" className={`${buttonClass} !py-1.5`}>New post</Link>
+              <Link href="/dashboard/posts/new" className={`${buttonClass} py-1.5!`}>New post</Link>
             )}
             {showMessages && (
               <Link href="/messages" className={linkClass}>
