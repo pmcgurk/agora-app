@@ -1,0 +1,7 @@
+# A small image with everything the backup scripts need: pg_dump/pg_restore/psql (same major version as the
+# database container in docker-compose.yml), the AWS CLI for the media bucket, and age for optional encryption.
+FROM postgres:18-alpine
+RUN apk add --no-cache aws-cli age
+COPY scripts/ /scripts/
+ENTRYPOINT ["sh"]
+CMD ["/scripts/backup.sh"]
