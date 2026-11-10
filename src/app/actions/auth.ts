@@ -2,6 +2,8 @@
 
 import { blockInDemo } from "@/lib/demo-guard";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
+import { mailIsConfigured, sendVerificationEmail } from "@/lib/account-email";
 import { createSession, destroySession } from "@/lib/auth";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { needsSetup } from "@/lib/instance";
@@ -48,9 +50,15 @@ export async function signup(formData: FormData) {
 
   // The creator account is made by the setup wizard; public sign-ups are always patrons.
   if (await needsSetup()) redirect("/setup");
+  // With email set up, the address has to be confirmed before the new account can comment or message.
+  // Without it nobody could confirm, so the account starts confirmed.
+  const confirm = await mailIsConfigured();
   const user = await prisma.user.create({
-    data: { name, email, role: "PATRON", passwordHash: await hashPassword(password) },
+    data: { name, email, role: "PATRON", passwordHash: await hashPassword(password), emailVerifiedAt: confirm ? null : new Date() },
   });
+  if (confirm) {
+    after(() => sendVerificationEmail(user).catch((error) => console.error("Sending the confirmation email failed:", error instanceof Error ? error.message : error)));
+  }
   await createSession(user.id);
   redirect(landingPath(user.role));
 }

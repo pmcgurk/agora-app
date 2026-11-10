@@ -74,6 +74,34 @@ export function applicationRejectedEmail(input: { to: string; siteName: string; 
   };
 }
 
+export function passwordResetEmail(input: { to: string; siteName: string; name: string; url: string; minutes: number }): MailMessage {
+  const paragraphs = [
+    `Hi ${input.name}, someone asked to reset the password for your ${input.siteName} account.`,
+    `The link works once and expires in ${input.minutes} minutes. If it wasn't you, ignore this email and your password stays as it is.`,
+  ];
+  const action = { label: "Choose a new password", url: input.url };
+  return {
+    to: input.to,
+    subject: `Reset your ${input.siteName} password`,
+    text: text(paragraphs, action),
+    html: layout(input.siteName, "Reset your password", paragraphs, action),
+  };
+}
+
+export function verifyEmailEmail(input: { to: string; siteName: string; name: string; url: string; days: number }): MailMessage {
+  const paragraphs = [
+    `Hi ${input.name}, confirm your email address to comment and send messages on ${input.siteName}.`,
+    `The link expires in ${input.days} days.`,
+  ];
+  const action = { label: "Confirm my email", url: input.url };
+  return {
+    to: input.to,
+    subject: `Confirm your email for ${input.siteName}`,
+    text: text(paragraphs, action),
+    html: layout(input.siteName, "Confirm your email", paragraphs, action),
+  };
+}
+
 export function testEmail(input: { to: string; siteName: string }): MailMessage {
   const paragraphs = [`This is a test email from ${input.siteName}. If you can read it, outgoing mail works.`];
   return {

@@ -1,5 +1,6 @@
 "use server";
 
+import { needsVerification } from "@/lib/account-email";
 import { blockInDemo } from "@/lib/demo-guard";
 import { revalidatePath } from "next/cache";
 import { canView, getAccessContext } from "@/lib/access";
@@ -65,6 +66,7 @@ export async function addComment(_previous: CommentFormState, formData: FormData
   const body = String(formData.get("body") ?? "").trim();
   const context = await requireAccess(String(formData.get("postId") ?? ""));
   if (!context) return { error: "You need access to this post to comment on it.", body };
+  if (await needsVerification(context.user)) return { error: "Confirm your email address first. We sent you a link, so check your inbox.", body };
   if (!body) return { error: "Write something first." };
   if (body.length > MAX_COMMENT_LENGTH) return { error: `Comments are limited to ${MAX_COMMENT_LENGTH} characters.`, body };
 

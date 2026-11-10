@@ -91,6 +91,7 @@ export async function writeDemoData(db: Prisma.TransactionClient, assets: DemoAs
       email: "maya@example.com",
       passwordHash,
       role: "CREATOR",
+      emailVerifiedAt: new Date(),
       slug: "maya-makes",
       tagline: "Handmade ceramics, one kiln load at a time",
       bio:
@@ -157,10 +158,10 @@ export async function writeDemoData(db: Prisma.TransactionClient, assets: DemoAs
   });
 
   const jordan = await db.user.create({
-    data: { name: "Jordan Lee", email: "jordan@example.com", passwordHash, role: "PATRON", onboardedAt: day(200) },
+    data: { name: "Jordan Lee", email: "jordan@example.com", passwordHash, role: "PATRON", emailVerifiedAt: new Date(), onboardedAt: day(200) },
   });
   const priya = await db.user.create({
-    data: { id: "demo-supporter-priya", name: "Priya Shah", email: "priya@example.com", passwordHash, role: "PATRON", onboardedAt: day(200) },
+    data: { id: "demo-supporter-priya", name: "Priya Shah", email: "priya@example.com", passwordHash, role: "PATRON", emailVerifiedAt: new Date(), onboardedAt: day(200) },
   });
   await db.subscription.create({ data: { patronId: jordan.id, tierId: makerClub.id, status: "ACTIVE", createdAt: day(90) } });
   await db.subscription.create({ data: { patronId: priya.id, tierId: studioFriend.id, status: "ACTIVE", createdAt: day(40) } });

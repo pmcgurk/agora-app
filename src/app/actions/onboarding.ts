@@ -50,6 +50,7 @@ export async function setupInstance(formData: FormData) {
       name,
       email,
       role: "CREATOR",
+      emailVerifiedAt: new Date(),
       passwordHash: await hashPassword(password),
       // Every creator gets a free tier so visitors can simply follow them.
       createdTiers: { create: { name: "Follower", price: 0 } },

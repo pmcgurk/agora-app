@@ -4,6 +4,7 @@ import Avatar from "@/components/Avatar";
 import FontLink from "@/components/FontLink";
 import PoweredBy from "@/components/PoweredBy";
 import { SiteHeader } from "@/components/SiteHeader";
+import VerifyBanner from "@/components/VerifyBanner";
 import ThemeCss from "@/components/ThemeCss";
 import { tipsAvailable } from "@/components/TipJar";
 import { subscribe } from "@/app/actions/patron";
@@ -55,6 +56,7 @@ export default async function CreatorShell({
       <FontLink fonts={creator} settings={creator.themeSettings} />
       <ThemeCss settings={creator.themeSettings} />
       <SiteHeader />
+      <VerifyBanner />
       {bannerUrl && (
         <div className="mx-auto max-w-4xl px-4 pt-4">
           {/* eslint-disable-next-line @next/next/no-img-element */}

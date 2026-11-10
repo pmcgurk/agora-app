@@ -40,6 +40,9 @@ model User {
   name             String
   email            String           @unique
   passwordHash     String
+  // Set once the address is confirmed (by link, or because a trusted flow already proved it).
+  emailVerifiedAt  DateTime?
+  emailTokens      EmailToken[]
   role             Role
   themeName        String           @default("default")
   themeSettings    Json?
@@ -453,4 +456,24 @@ model WaitlistEntry {
   id        String   @id @default(cuid())
   email     String   @unique
   createdAt DateTime @default(now())
+}
+
+enum EmailTokenKind {
+  PASSWORD_RESET
+  VERIFY_EMAIL
+}
+
+// A single-use link sent by email. Only a hash of the token is stored, so a database leak cannot be
+// used to reset anyone's password.
+model EmailToken {
+  id        String         @id @default(cuid())
+  userId    String
+  kind      EmailTokenKind
+  tokenHash String         @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime       @default(now())
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, kind])
 }
