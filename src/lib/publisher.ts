@@ -13,7 +13,12 @@ const INTERVAL_MS = Math.max(1, Number(process.env.PUBLISHER_INTERVAL_SECONDS) |
 const TICKS_PER_HOUR = Math.max(1, Math.round((60 * 60 * 1000) / INTERVAL_MS));
 let ticks = 0;
 
+// Sending 50 emails can take longer than a tick; a tick that finds the last one still running does nothing.
+let running = false;
+
 async function tick() {
+  if (running) return;
+  running = true;
   try {
     await announceDuePosts();
     await sendQueuedPostEmails();
@@ -21,6 +26,8 @@ async function tick() {
     if (ticks++ % TICKS_PER_HOUR === 0) await cleanExpired();
   } catch (error) {
     console.error("Announcing scheduled posts failed:", error instanceof Error ? error.message : error);
+  } finally {
+    running = false;
   }
 }
 

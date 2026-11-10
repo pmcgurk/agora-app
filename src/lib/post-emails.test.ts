@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const { prisma, getMailSettings, sendMail } = vi.hoisted(() => ({
   prisma: {
     post: { findUnique: vi.fn() },
-    subscription: { findMany: vi.fn() },
+    subscription: { findMany: vi.fn(), findFirst: vi.fn() },
+    block: { findUnique: vi.fn() },
     user: { findUnique: vi.fn(), update: vi.fn() },
     postEmail: { createMany: vi.fn(), findMany: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
   },
@@ -26,6 +27,9 @@ beforeEach(() => {
   sendMail.mockResolvedValue({ ok: true });
   prisma.postEmail.updateMany.mockResolvedValue({ count: 1 });
   prisma.postEmail.createMany.mockResolvedValue({ count: 2 });
+  // By default the member still follows the creator and is not blocked.
+  prisma.block.findUnique.mockResolvedValue(null);
+  prisma.subscription.findFirst.mockResolvedValue({ tier: { price: 0 } });
 });
 
 describe("queueing new-post emails", () => {
@@ -74,8 +78,9 @@ describe("queueing new-post emails", () => {
 describe("sending the queue", () => {
   const row = (overrides: Record<string, unknown> = {}, user: Record<string, unknown> = {}) => ({
     id: "e1",
+    attempts: 0,
     user: { id: "u1", name: "Sam", email: "sam@example.com", emailPosts: true, emailVerifiedAt: new Date(), unsubscribeToken: TOKEN, ...user },
-    post: { id: "p1", slug: "hello", title: "Hello world", textContent: "Some **words** here.", publishedAt: past, creator: { id: "c1", name: "Paul", slug: "paul" } },
+    post: { id: "p1", slug: "hello", title: "Hello world", textContent: "Some **words** here.", publishedAt: past, isPublic: true, minTier: null, creator: { id: "c1", name: "Paul", slug: "paul" } },
     ...overrides,
   });
 
@@ -107,7 +112,7 @@ describe("sending the queue", () => {
   it("counts the attempt before sending, so a crash cannot loop forever", async () => {
     prisma.postEmail.findMany.mockResolvedValue([row()]);
     await sendQueuedPostEmails();
-    expect(prisma.postEmail.updateMany).toHaveBeenCalledWith({ where: { id: "e1", sentAt: null }, data: { attempts: { increment: 1 } } });
+    expect(prisma.postEmail.updateMany).toHaveBeenCalledWith({ where: { id: "e1", sentAt: null, attempts: 0 }, data: { attempts: { increment: 1 } } });
     expect(prisma.postEmail.updateMany.mock.invocationCallOrder[0]).toBeLessThan(sendMail.mock.invocationCallOrder[0]);
   });
 
@@ -121,13 +126,39 @@ describe("sending the queue", () => {
     prisma.postEmail.findMany.mockResolvedValue([row({}, { emailPosts: false }), row({ id: "e2" }, { emailVerifiedAt: null })]);
     expect(await sendQueuedPostEmails()).toEqual({ sent: 0, failed: 0, skipped: 2 });
     expect(sendMail).not.toHaveBeenCalled();
-    expect(prisma.postEmail.update).toHaveBeenCalledTimes(2);
+    expect(prisma.postEmail.updateMany).toHaveBeenCalledTimes(2);
   });
 
   it("skips a post that went back to a draft after it was queued", async () => {
     prisma.postEmail.findMany.mockResolvedValue([row({ post: { ...row().post, publishedAt: null } })]);
     expect(await sendQueuedPostEmails()).toEqual({ sent: 0, failed: 0, skipped: 1 });
     expect(sendMail).not.toHaveBeenCalled();
+  });
+
+  it("does not send when another sender claimed the row first", async () => {
+    prisma.postEmail.findMany.mockResolvedValue([row()]);
+    prisma.postEmail.updateMany.mockResolvedValue({ count: 0 });
+    expect(await sendQueuedPostEmails()).toEqual({ sent: 0, failed: 0, skipped: 0 });
+    expect(sendMail).not.toHaveBeenCalled();
+  });
+
+  it("skips someone who stopped following, or was blocked, while the email waited", async () => {
+    prisma.postEmail.findMany.mockResolvedValue([row()]);
+    prisma.subscription.findFirst.mockResolvedValue(null);
+    expect(await sendQueuedPostEmails()).toEqual({ sent: 0, failed: 0, skipped: 1 });
+    prisma.subscription.findFirst.mockResolvedValue({ tier: { price: 0 } });
+    prisma.block.findUnique.mockResolvedValue({ userId: "u1" });
+    expect(await sendQueuedPostEmails()).toEqual({ sent: 0, failed: 0, skipped: 1 });
+    expect(sendMail).not.toHaveBeenCalled();
+  });
+
+  it("skips a members-only post the member can no longer read", async () => {
+    const gated = { ...row().post, isPublic: false, minTier: { price: 1000 } };
+    prisma.postEmail.findMany.mockResolvedValue([row({ post: gated })]);
+    prisma.subscription.findFirst.mockResolvedValue({ tier: { price: 500 } });
+    expect(await sendQueuedPostEmails()).toEqual({ sent: 0, failed: 0, skipped: 1 });
+    prisma.subscription.findFirst.mockResolvedValue({ tier: { price: 1000 } });
+    expect(await sendQueuedPostEmails()).toEqual({ sent: 1, failed: 0, skipped: 0 });
   });
 
   it("records a failure and leaves the row to be retried", async () => {

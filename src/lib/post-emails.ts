@@ -1,4 +1,4 @@
-import { activeSubscriptionWhere } from "@/lib/access";
+import { activeSubscriptionWhere, canView, getAccessContext } from "@/lib/access";
 import { postPath } from "@/lib/creator";
 import { newPostEmail } from "@/lib/email-templates";
 import { markdownExcerpt } from "@/lib/excerpt";
@@ -41,6 +41,17 @@ export async function queuePostEmails(postId: string): Promise<number> {
   return created.count;
 }
 
+// Checked again at send time, because things change while an email waits in the queue: the member must still follow
+// the creator, not be blocked, and be allowed to read the post as it is now.
+async function stillAllowed(
+  userId: string,
+  post: { isPublic: boolean; publishedAt: Date | null; minTier: { price: number } | null; creator: { id: string } },
+): Promise<boolean> {
+  const access = await getAccessContext(post.creator.id, { id: userId });
+  if (access.isOwner || access.blocked || access.maxActiveTierPrice === null) return false;
+  return canView(post, access);
+}
+
 // Sends the next few queued emails. Called every minute by the publisher timer.
 export async function sendQueuedPostEmails(limit = SEND_BATCH): Promise<{ sent: number; failed: number; skipped: number }> {
   const result = { sent: 0, failed: 0, skipped: 0 };
@@ -51,21 +62,35 @@ export async function sendQueuedPostEmails(limit = SEND_BATCH): Promise<{ sent: 
     take: limit,
     include: {
       user: { select: { id: true, name: true, email: true, emailPosts: true, emailVerifiedAt: true, unsubscribeToken: true } },
-      post: { select: { id: true, slug: true, title: true, textContent: true, publishedAt: true, creator: { select: { id: true, name: true, slug: true } } } },
+      post: {
+        select: {
+          id: true, slug: true, title: true, textContent: true, publishedAt: true, isPublic: true,
+          minTier: { select: { price: true } },
+          creator: { select: { id: true, name: true, slug: true } },
+        },
+      },
     },
   });
   if (queued.length === 0) return result;
   const site = await siteName();
 
   for (const row of queued) {
-    // Skip (and close out) anything that is no longer wanted: they unsubscribed, or the post went back to a draft.
-    if (!row.user.emailPosts || !row.user.emailVerifiedAt || !isLive(row.post.publishedAt)) {
-      await prisma.postEmail.update({ where: { id: row.id }, data: { sentAt: new Date(), lastError: "skipped" } });
+    // Skip (and close out) anything that is no longer wanted: they unsubscribed, the post went back to a draft,
+    // or they can no longer read it (membership ended, blocked, or the post moved to a higher tier).
+    const wanted =
+      row.user.emailPosts && row.user.emailVerifiedAt && isLive(row.post.publishedAt) && (await stillAllowed(row.user.id, row.post));
+    if (!wanted) {
+      await prisma.postEmail.updateMany({ where: { id: row.id, sentAt: null }, data: { sentAt: new Date(), lastError: "skipped" } });
       result.skipped++;
       continue;
     }
-    // Count the attempt first, so a crash halfway never turns into endless retries.
-    const claimed = await prisma.postEmail.updateMany({ where: { id: row.id, sentAt: null }, data: { attempts: { increment: 1 } } });
+    // Claim the row: the attempt count is only raised if nobody else has changed it since we read it, so when two
+    // senders overlap exactly one of them wins and the other moves on. It is also counted before sending, so a
+    // crash halfway never turns into endless retries.
+    const claimed = await prisma.postEmail.updateMany({
+      where: { id: row.id, sentAt: null, attempts: row.attempts },
+      data: { attempts: { increment: 1 } },
+    });
     if (claimed.count !== 1) continue;
     const message = newPostEmail({
       to: row.user.email,
