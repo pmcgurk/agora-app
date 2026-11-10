@@ -26,6 +26,7 @@ import {
 } from "@/lib/post-media";
 import { notifyRefund } from "@/lib/notifications";
 import { announceIfDue, isLive } from "@/lib/publishing";
+import { uniquePostSlug } from "@/lib/slugs";
 import { formatMoney } from "@/lib/currency";
 import { tipperLabel } from "@/lib/tips";
 import { emitEvent } from "@/lib/webhooks";
@@ -248,6 +249,7 @@ export async function createPost(_previous: PostFormState, formData: FormData): 
       data: {
         creatorId: user.id,
         title: form.title,
+        slug: await uniquePostSlug(user.id, form.title),
         textContent,
         isPublic: form.isPublic,
         minTierId: form.minTierId,
@@ -351,6 +353,8 @@ export async function updatePost(_previous: PostFormState, formData: FormData): 
         where: { id: post.id },
         data: {
           title: form.title,
+          // Until a post has been shown to anyone its address follows the title; after that it never changes.
+          ...(post.announcedAt === null && !isLive(post.publishedAt) ? { slug: await uniquePostSlug(user.id, form.title, post.id) } : {}),
           textContent,
           isPublic: form.isPublic,
           minTierId: form.minTierId,

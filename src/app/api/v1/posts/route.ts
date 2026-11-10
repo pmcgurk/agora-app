@@ -1,6 +1,8 @@
 import { ApiError, page, pagination, route } from "@/lib/api";
 import { postInclude, serializePost } from "@/lib/api-posts";
+import { getSiteCreator } from "@/lib/instance";
 import { announceIfDue } from "@/lib/publishing";
+import { uniquePostSlug } from "@/lib/slugs";
 import { prisma } from "@/lib/prisma";
 
 export const GET = route(async (request, user) => {
@@ -13,7 +15,8 @@ export const GET = route(async (request, user) => {
     include: postInclude,
   });
   const result = page(rows, take);
-  return { body: { data: result.data.map((post) => serializePost(post, user)), nextCursor: result.nextCursor } };
+  const isSite = (await getSiteCreator())?.id === user.id;
+  return { body: { data: result.data.map((post) => serializePost(post, user, isSite)), nextCursor: result.nextCursor } };
 });
 
 // Text posts only; photos and videos are uploaded from the dashboard.
@@ -44,9 +47,9 @@ export const POST = route(async (request, user) => {
   }
 
   const post = await prisma.post.create({
-    data: { creatorId: user.id, title, textContent: text, isPublic: visibility === "public", minTierId, publishedAt },
+    data: { creatorId: user.id, title, slug: await uniquePostSlug(user.id, title), textContent: text, isPublic: visibility === "public", minTierId, publishedAt },
     include: postInclude,
   });
   await announceIfDue(post.id);
-  return { body: { data: serializePost(post, user) }, status: 201 };
+  return { body: { data: serializePost(post, user, (await getSiteCreator())?.id === user.id) }, status: 201 };
 });

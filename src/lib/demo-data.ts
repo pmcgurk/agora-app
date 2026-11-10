@@ -1,6 +1,7 @@
 import sharp from "sharp";
 import type { Prisma, PrismaClient } from "../generated/prisma/client";
 import { hashPassword } from "./password";
+import { slugify } from "./slugify";
 import { objectExists, uploadObject } from "./s3";
 
 // Sample data for the public demo and for trying Agora locally: a fictional ceramics creator with
@@ -184,6 +185,7 @@ export async function writeDemoData(db: Prisma.TransactionClient, assets: DemoAs
         id: input.id,
         creatorId: maya.id,
         title: input.title,
+        slug: slugify(input.title),
         textContent: input.text(inline.map((image) => image.id)),
         isPublic: input.isPublic,
         minTierId: input.tier?.id ?? null,

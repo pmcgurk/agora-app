@@ -21,3 +21,18 @@ export async function supportPath(creator: { id: string; slug: string | null }):
   const site = await getSiteCreator();
   return site?.id === creator.id ? "/support" : `${creatorPath(creator)}/support`;
 }
+
+// The address of a post. On a single-creator site it is /posts/<slug>; on a site with several creators it
+// stays under the creator. Posts without a slug (made before slugs existed) fall back to their id.
+export function postPathFor(
+  creator: { id: string; slug: string | null },
+  post: { id: string; slug: string | null },
+  isSiteCreator: boolean,
+): string {
+  const key = post.slug ?? post.id;
+  return isSiteCreator ? `/posts/${key}` : `${creatorPath(creator)}/posts/${key}`;
+}
+
+export async function postPath(creator: { id: string; slug: string | null }, post: { id: string; slug: string | null }): Promise<string> {
+  return postPathFor(creator, post, (await getSiteCreator())?.id === creator.id);
+}

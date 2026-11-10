@@ -28,6 +28,7 @@ async function requireAccess(postId: string) {
 
 function refresh() {
   revalidatePath("/creators/[id]/posts/[postId]", "page");
+  revalidatePath("/posts/[postId]", "page");
   revalidatePath("/creators/[id]", "page");
 }
 

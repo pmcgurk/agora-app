@@ -178,6 +178,8 @@ model Post {
   publishedAt      DateTime?     @default(now())
   // When subscribers and webhooks were told about the post; null until then.
   announcedAt      DateTime?
+  // The readable part of the post address, unique per creator. Posts opened by id still work.
+  slug             String?
   comments         Comment[]
   likes            PostLike[]
   views            PostViewDay[]
@@ -187,6 +189,7 @@ model Post {
   creator          User          @relation("CreatorPosts", fields: [creatorId], references: [id], onDelete: Cascade)
   minTier          Tier?         @relation("MinimumTier", fields: [minTierId], references: [id], onDelete: SetNull)
 
+  @@unique([creatorId, slug])
   @@index([creatorId, publishedAt])
 }
 

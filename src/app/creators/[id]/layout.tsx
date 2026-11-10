@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 import CreatorShell from "@/components/CreatorShell";
 import { creatorPath, getCreator } from "@/lib/creator";
+import { markdownExcerpt } from "@/lib/excerpt";
 import { creatorIcons } from "@/lib/favicon";
 import { getSiteCreator, requireInstanceAccess } from "@/lib/instance";
 
@@ -11,7 +12,20 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const creator = await getCreator((await params).id);
   if (!creator) return {};
   const site = await getSiteCreator();
-  return { title: creator.name, icons: creatorIcons(creator, { single: site?.id === creator.id }) };
+  const description = creator.tagline || markdownExcerpt(creator.bio ?? "", 160) || undefined;
+  return {
+    title: creator.name,
+    description,
+    icons: creatorIcons(creator, { single: site?.id === creator.id }),
+    alternates: { types: { "application/rss+xml": `/creators/${creator.slug ?? creator.id}/feed.xml` } },
+    openGraph: {
+      type: "profile",
+      title: creator.name,
+      description,
+      siteName: creator.name,
+      images: creator.avatarKey ? [`/api/avatar/${creator.id}`] : [],
+    },
+  };
 }
 
 export default async function CreatorLayout({
