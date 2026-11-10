@@ -156,11 +156,17 @@ export default function MarkdownEditor({
 
   const previews = new Map(images.filter((image) => image.previewUrl).map((image) => [`${INLINE_IMAGE_PREFIX}${image.id}`, image.previewUrl!]));
   const words = value.trim() ? value.trim().split(/\s+/).length : 0;
+  const characters = value.length;
 
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-sm font-medium">{label ?? "Text"}</span>
+        <span className="text-sm font-medium">
+          {label ?? "Text"}{" "}
+          <span className="font-normal text-muted">
+            · {words} {words === 1 ? "word" : "words"} · {characters} {characters === 1 ? "character" : "characters"}
+          </span>
+        </span>
         <div role="tablist" aria-label="Editor view" className="flex rounded-theme border border-line text-sm">
           {(["write", "preview"] as const).map((view) => (
             <button
@@ -230,8 +236,7 @@ export default function MarkdownEditor({
             className={`${inputClass} min-h-72 font-mono text-[0.95rem] leading-relaxed`}
           />
           <p className="text-xs text-muted">
-            Markdown: **bold**, *italic*, ~~strike~~, # headings, &gt; quotes, - lists, [links](https://…), ![images](…). A YouTube, Vimeo, Loom or Spotify link on its own line becomes a player. Ctrl+B, Ctrl+I and Ctrl+K work too.
-            {" "}{words} {words === 1 ? "word" : "words"}.
+            Ctrl+B bold, Ctrl+I italic, Ctrl+K link. Markdown works. A video link on its own line embeds it.
           </p>
         </>
       ) : (
