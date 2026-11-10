@@ -422,8 +422,13 @@ export async function requestEmailChange(formData: FormData) {
     done("account", `We sent a confirmation link to ${newEmail}. Your address changes when you open it.`);
   }
   if (await prisma.user.findUnique({ where: { email: newEmail }, select: { id: true } })) fail("account", "That email is already registered.");
-  await prisma.user.update({ where: { id: user.id }, data: { email: newEmail, emailVerifiedAt: new Date() } });
-  done("account", "Email changed.");
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: user.id }, data: { email: newEmail, emailVerifiedAt: new Date() } }),
+    prisma.session.deleteMany({ where: { userId: user.id } }),
+    prisma.emailToken.deleteMany({ where: { userId: user.id } }),
+  ]);
+  await destroySession();
+  redirect("/login?notice=" + encodeURIComponent("Your email address has been changed. Log in with the new one."));
 }
 
 // Deletes a member's own account. Creators are refused: deleting one would delete the whole page.

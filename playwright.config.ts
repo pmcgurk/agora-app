@@ -12,7 +12,7 @@ export default defineConfig({
   workers: 1,
   timeout: 90_000,
   expect: { timeout: 10_000 },
-  retries: process.env.CI ? 1 : 0,
+  retries: 0,
   reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "list",
   use: {
     baseURL: `http://localhost:${port}`,

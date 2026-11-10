@@ -15,7 +15,7 @@ async function ensureDeletedUser(): Promise<void> {
     create: {
       id: DELETED_USER_ID,
       name: "Deleted user",
-      email: "deleted-user@agora.invalid",
+      email: `deleted-${globalThis.crypto.randomUUID()}@agora.invalid`,
       // Not a valid hash of anything, so no password ever matches.
       passwordHash: "!",
       role: "PATRON",
@@ -35,7 +35,10 @@ export async function deleteAccountData(userId: string): Promise<void> {
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { avatarKey: true, bannerKey: true, stripeCustomerId: true } });
   if (!user) return;
 
-  const plans = await prisma.subscription.findMany({ where: { patronId: userId, status: { in: ["ACTIVE", "PAST_DUE"] } }, select: { id: true } });
+  const plans = await prisma.subscription.findMany({ where: { patronId: userId, status: { in: ["ACTIVE", "PAST_DUE"] } }, select: { id: true, stripeSubscriptionId: true } });
+  if (plans.some((plan) => plan.stripeSubscriptionId) && !(await stripeConfigured())) {
+    throw new Error("Stripe must be configured before deleting an account with a paid subscription.");
+  }
   for (const plan of plans) await endPlan(plan.id, { atPeriodEnd: false });
 
   // Stripe keeps its own payment records, but the customer record (name, email) can go.
