@@ -114,6 +114,7 @@ export async function confirmEmailChange(formData: FormData) {
   await prisma.$transaction([
     prisma.user.update({ where: { id: user!.id }, data: { email: newEmail, emailVerifiedAt: new Date() } }),
     prisma.session.deleteMany({ where: { userId: user!.id } }),
+    prisma.emailToken.deleteMany({ where: { userId: user!.id } }),
   ]);
   after(() => sendEmailChangedNotice(user!.email, user!, newEmail).catch(() => undefined));
   go("/login", "notice", "Your email address has been changed. Log in with the new one.");
