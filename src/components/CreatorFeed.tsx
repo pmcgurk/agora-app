@@ -99,7 +99,7 @@ export default async function CreatorFeed({
             maxLength={MAX_SEARCH_LENGTH}
             placeholder="Search posts"
             aria-label="Search posts"
-            className={`${inputClass} !mt-0`}
+            className={`${inputClass} mt-0!`}
           />
           <button className={secondaryButtonClass}>Search</button>
         </form>

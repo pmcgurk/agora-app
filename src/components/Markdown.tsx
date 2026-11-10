@@ -66,7 +66,7 @@ function renderInline(ctx: MarkdownContext, text: string, keyPrefix = "i"): Reac
     const key = `${keyPrefix}${index++}`;
     if (match.index > last) nodes.push(text.slice(last, match.index));
     const [, code, bold, bold2, strike, italic, italic2, alt, imageSrc, label, href, bare] = match;
-    if (code !== undefined) nodes.push(<code key={key} className="rounded bg-secondary px-1 py-0.5 text-[0.9em]">{code}</code>);
+    if (code !== undefined) nodes.push(<code key={key} className="rounded-sm bg-secondary px-1 py-0.5 text-[0.9em]">{code}</code>);
     else if (bold !== undefined || bold2 !== undefined) nodes.push(<strong key={key}>{renderInline(ctx, bold ?? bold2, key)}</strong>);
     else if (strike !== undefined) nodes.push(<del key={key}>{renderInline(ctx, strike, key)}</del>);
     else if (italic !== undefined || italic2 !== undefined) nodes.push(<em key={key}>{renderInline(ctx, italic ?? italic2, key)}</em>);
@@ -202,5 +202,5 @@ export default function Markdown({
     }
   }
 
-  return <div className={`space-y-3 break-words ${className ?? ""}`}>{blocks}</div>;
+  return <div className={`space-y-3 wrap-break-word ${className ?? ""}`}>{blocks}</div>;
 }

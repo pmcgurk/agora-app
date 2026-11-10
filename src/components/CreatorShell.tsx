@@ -60,7 +60,7 @@ export default async function CreatorShell({
       {bannerUrl && (
         <div className="mx-auto max-w-4xl px-4 pt-4">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={bannerUrl} alt="" className="agora-banner aspect-[16/5] w-full rounded-theme object-cover" />
+          <img src={bannerUrl} alt="" className="agora-banner aspect-16/5 w-full rounded-theme object-cover" />
         </div>
       )}
       <ProfileLayout>

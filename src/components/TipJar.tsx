@@ -40,7 +40,7 @@ export default async function TipJar({ creator, returnTo }: { creator: Creator; 
           {TIP_PRESETS.map((preset) => (
             <label key={preset} className="cursor-pointer">
               <input type="radio" name="amount" value={(preset / 100).toFixed(2)} defaultChecked={preset === 500} className="peer sr-only" />
-              <span className="inline-block rounded-full border border-line px-4 py-1.5 font-medium peer-checked:border-primary peer-checked:bg-primary peer-checked:text-on-primary peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2">
+              <span className="inline-block rounded-full border border-line px-4 py-1.5 font-medium peer-checked:border-primary peer-checked:bg-primary peer-checked:text-on-primary peer-focus-visible:outline-solid peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2">
                 {formatMoney(preset, creator.currency)}
               </span>
             </label>
@@ -51,7 +51,7 @@ export default async function TipJar({ creator, returnTo }: { creator: Creator; 
             autoComplete="off"
             aria-label={`Other amount in ${creator.currency}`}
             placeholder={`Other (${creator.currency})`}
-            className={`${inputClass} !w-36 !rounded-full`}
+            className={`${inputClass} w-36! rounded-full!`}
           />
         </fieldset>
         <details className="text-sm">
