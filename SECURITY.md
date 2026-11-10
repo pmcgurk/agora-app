@@ -52,6 +52,16 @@ See [Deploying Agora](docs/deploying.md) for the full list. The important ones:
   the database, the storage service or a cloud metadata endpoint. Set `WEBHOOK_ALLOW_PRIVATE=true` only if your own
   automation runs on a private network.
 - **Stripe** webhooks are verified by signature, each event is processed once, and a failed one is retried.
+- **Saved credentials** (the Stripe keys and the SMTP password from Settings) are encrypted with AES-256-GCM using a key
+  made from `APP_SECRET`, so a copy of the database or a backup does not contain them in a usable form. Values saved
+  before `APP_SECRET` was set are encrypted at the next start.
+- **Sign-up** on a site that can send email creates nothing until the address's owner opens a link and chooses a password,
+  and answers the same for an address that has an account and one that has not, so it cannot be used to find out who is
+  registered and a stranger cannot register someone else's address.
+- **Accounts**: members can change their email (confirmed at the new address, the old one is told, every device signed out),
+  download their data and delete their account; deleting needs the password, cancels paid plans first and removes the
+  Stripe customer record.
+- **Email links** to unsubscribe use a long random secret per member and do nothing on a mere visit.
 - **Dependencies** are checked in CI (`npm audit` for production dependencies) and updated through Dependabot.
 
 ## Known limits
@@ -60,10 +70,12 @@ These are understood and not yet fixed. Plan around them.
 
 - **Rate limits are per process and in memory.** They reset when the server restarts and do not work across several
   instances. Add limits at your proxy for a busy public site.
-- **Stripe and SMTP credentials saved in Settings are stored in the database in plain text.** Anyone who can read the
-  database (or a backup) can read them. Prefer restricted Stripe keys, and environment variables if you would rather
-  keep secrets out of the database.
-- **Sign-up reveals whether an email is already registered** (it says so). The sign-in and reset forms do not.
+- **`APP_SECRET` is the key to the saved credentials.** Without it set, they are stored in plain text (the Payments and Email
+  pages warn about this); if it is lost or changed, they cannot be read and must be entered again. There is no key rotation
+  yet, and the per-webhook signing secrets are not encrypted. Prefer restricted Stripe keys.
+- **A site that cannot send email still reveals registered addresses at sign-up** (it has to say "already registered", since it
+  cannot reply privately). The sign-in and reset forms never do.
+- **Email change and account deletion ask for the password but not a second factor.** There is no two-factor sign-in yet.
 - **Webhook addresses are checked when the webhook is saved and again on each delivery**, but a hostile DNS server
   could change its answer between the check and the connection. The private-address block is a strong guard, not a
   sandbox: do not run Agora with credentials it does not need.

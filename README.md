@@ -15,7 +15,7 @@ your own on any host.
 - Prisma ORM and PostgreSQL 18
 - MinIO for S3-compatible media storage
 - Docker Compose for self-hosted deployment
-- Vitest for unit tests (`npm test`), run in CI with lint, type checks and a build
+- Vitest for unit tests (`npm test`) and Playwright for browser tests (`npm run test:e2e`), run in CI with lint, type checks and a build
 
 ## Quick start
 
@@ -56,6 +56,8 @@ machine, copy `.env.example` to `.env` and:
   ready-made [Docker Compose + Caddy setup](docker-compose.prod.yml) for one server and a
   [Render guide](docs/deploy-render.md) (blueprint: [`render.yaml`](render.yaml));
 - set `SETUP_TOKEN` on any public server: setup then asks for it, so nobody else can claim the site first;
+- set `APP_SECRET` so the Stripe keys and SMTP password saved in Settings are stored encrypted (keep it with your other
+  secrets: without it, saved keys cannot be read after a restore);
 - set up [backups](docs/backups.md) and run the restore drill once;
 - put Agora behind an HTTPS reverse proxy. With an `https://` `NEXT_PUBLIC_BASE_URL`
   the container refuses to start with the default development passwords, and
@@ -160,8 +162,33 @@ Without any mail settings, Agora still works: nobody is asked to confirm their e
 
 - **Forgot password:** with email set up, the log-in page offers a reset link: single-use, valid for an hour, and
   signing every device out when used. Asking gives the same answer whether or not the address has an account.
-- **Email confirmation:** with email set up, new member accounts confirm their address before they can comment or
-  message (a banner asks them to). Existing accounts, the owner and invited or approved creators count as confirmed.
+- **Signing up:** with email set up, the form asks only for a name and address and sends a link. The account is made when
+  the address's owner opens the link and chooses a password, so nobody can register someone else's address, and the
+  form answers the same whether or not the address already has an account (that address is told by email instead). On a
+  site that cannot send email, sign-up asks for a password at once and says if the address is taken.
+- **Email confirmation:** an address is confirmed by the link that created the account. Accounts that are not confirmed
+  (for example after changing email on a site that could not send mail) are asked to, by a banner, before they can comment
+  or message.
+
+### Your account
+
+Under **Settings → Account**, any member can:
+
+- **Change their email:** with their password; the new address gets a link and the change happens when it is opened. The
+  old address is told and every device is signed out.
+- **Download their data:** one JSON file with their details, memberships, payments, comments, likes and messages (and a
+  creator's posts and tiers), without password hashes or other people's email addresses.
+- **Delete their account** (creators cannot: it would delete their page). Paid plans are cancelled in Stripe first; payments
+  stay in the creator's records without the member's name or message; comments that have replies stay as "[deleted]".
+
+### New posts by email
+
+Members can ask to be emailed when a creator they follow publishes: by ticking a box when signing up, in **Settings →
+Notifications**, or from the follow strip on the creator's page. It is off until they choose it, needs a confirmed address
+and a site that can send email, follows the same tier rules as the post itself, and every email carries an unsubscribe link
+(and the one-click header mail programs use). A timer inside the server sends 50 a minute, so a long list never holds
+anything up. The dashboard shows how many members get posts by email.
+
 
 ## Recovering access
 
@@ -178,12 +205,23 @@ Open the link it prints, choose a new password, and log in. For a lost *database
 ## Tests
 
 ```sh
-npm test            # unit tests (Vitest): access rules, publishing, feed search, Stripe webhooks, auth, feeds
+npm test            # unit tests (Vitest): access rules, publishing, feed search, Stripe webhooks, auth, feeds, email
 npm run typecheck
 npm run lint
+npm run test:e2e   # browser tests (Playwright): needs a throwaway Postgres and a mail catcher, see e2e/README.md
 ```
 
-They need no database or network. CI runs them on every push and pull request, along with a build and `npm audit`.
+The unit tests need no database or network. The browser tests drive a real build of the site through setup, posting,
+sign-up, password reset, changing email, deleting an account, new-post emails and the security headers. CI runs both on
+every push and pull request, along with a build and `npm audit`.
+
+## Versions
+
+Every push to `main` gets the next version: a workflow raises the patch number in `package.json` by one, tags the commit
+`vX.Y.Z` and creates a GitHub release. The site's footer shows it after "Powered by Agora" (with the short commit when the
+host provides one: Render, Coolify and Vercel do, or build with `--build-arg GIT_SHA=...`), and `/api/health` reports it too,
+so you can always tell which build a site is running. To change the major or minor number, edit `package.json` in a pull
+request. If `main` is protected, allow the github-actions bot to bypass the rule so the workflow can push the bump.
 
 ## Screenshots
 
@@ -327,9 +365,11 @@ promised; items move up when someone needs them. Contributions welcome (see
 - [x] SMTP behind a single `lib/mail.ts` interface, configured in Settings or by environment variables.
 - [ ] Provider API adapters (Postmark, SES, Resend). Their SMTP endpoints already work.
 - [x] Email verification at sign-up and password reset links (time-limited, single use).
-- [ ] Let members change their email address (with confirmation), and add "delete my account".
-- [ ] Notification emails for new posts and member events, with a per-user opt-in (the notification
-      preferences already exist).
+- [x] Let members change their email address (with confirmation), delete their account, and download their data.
+- [x] Emails for new posts, with a per-member opt-in and one-click unsubscribe.
+- [ ] Emails for other events (new comments and replies, new members), with the same opt-in and unsubscribe.
+- [ ] A digest option (one email a day or week instead of one per post).
+- [ ] Bounce and complaint handling, and a log of what was sent and failed (the queue records failures; nothing shows them).
 - [ ] Receipts and refund confirmations for patrons.
 
 ### Analytics
@@ -356,7 +396,8 @@ promised; items move up when someone needs them. Contributions welcome (see
 - [x] Pagination or infinite scroll on the feed.
 - [ ] Pagination for long comment threads (a post shows its first 200 comments).
 - [ ] Email or in-app "new post" digest instead of only notifications.
-- [ ] Downloadable receipts and an export of a patron's own data.
+- [x] An export of a patron's own data.
+- [ ] Downloadable receipts.
 
 ### Theming and presentation
 
@@ -381,14 +422,17 @@ promised; items move up when someone needs them. Contributions welcome (see
 - [x] Backups of Postgres and the media bucket, with a restore drill and a restore, for any host (scheduling is up to the
       operator; see the backups guide).
 - [x] `npm audit` in CI and dependency updates through Dependabot.
-- [ ] Encrypt Stripe and SMTP credentials stored in the database with a key from the environment.
-- [ ] Stop sign-up revealing whether an email is registered (now that confirmation emails exist).
+- [x] Stripe and SMTP credentials are stored encrypted with a key from `APP_SECRET`.
+- [x] Sign-up no longer reveals whether an email is registered (on sites that can send email).
+- [ ] Key rotation for `APP_SECRET`, and encrypting the per-webhook signing secrets too.
 - [ ] Clear the moderate advisories in the lint tooling once the ESLint ecosystem has fixes.
 
 ### Engineering
 
 - [x] A unit test suite in CI (access and payment rules, publishing, feeds, auth, webhooks).
-- [ ] End-to-end browser tests in CI for sign-up, posting, subscribing and tipping.
+- [x] End-to-end browser tests in CI: setup, posting, sign-up, password reset, account changes, new-post emails, security headers.
+- [ ] Browser tests for subscribing and tipping (they need Stripe test keys) and for file uploads (they need storage).
+- [x] Versions: every push to main is numbered, tagged and released, and the version shows in the footer.
 - [x] Health endpoint for monitoring (`/api/health`, answers 503 when the database is unreachable), used by the container healthcheck.
 - [ ] Structured logging with request IDs.
 - [ ] Prebuilt container image published to a registry, so self-hosters don't need to build.
