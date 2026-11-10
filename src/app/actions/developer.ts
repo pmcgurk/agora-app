@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createApiKey } from "@/lib/api-keys";
 import { requireUser } from "@/lib/auth";
 import { DEMO_OFF, isDemoMode } from "@/lib/demo";
+import { assertPublicTarget } from "@/lib/net-guard";
 import { prisma } from "@/lib/prisma";
 import { deliver, isWebhookEvent, newWebhookSecret, parseWebhookUrl, WEBHOOK_EVENTS } from "@/lib/webhooks";
 
@@ -41,6 +42,11 @@ export async function createWebhook(formData: FormData) {
   if (isDemoMode()) back("error", DEMO_OFF);
   const url = parseWebhookUrl(String(formData.get("url") ?? "").trim());
   if (!url) back("error", "Enter a valid http(s) URL.");
+  const refusal = await assertPublicTarget(url).then(
+    () => null,
+    (error: Error) => error.message,
+  );
+  if (refusal) back("error", refusal);
   const events = formData.getAll("events").map(String).filter(isWebhookEvent);
   if (events.length === 0) back("error", "Choose at least one event.");
   if ((await prisma.webhook.count({ where: { userId: user.id } })) >= MAX_WEBHOOKS) {

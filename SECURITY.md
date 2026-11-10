@@ -9,22 +9,66 @@ You should get a reply within a few days.
 
 ## Hardening checklist for operators
 
-- Create your creator account before sharing the URL (the first sign-up becomes the creator).
+See [Deploying Agora](docs/deploying.md) for the full list. The important ones:
+
+- **Set `SETUP_TOKEN`** on any server that is reachable from the internet. Without it, whoever opens `/setup` first
+  becomes the owner of the site. Create your account straight away either way.
 - Change `POSTGRES_PASSWORD`, `MINIO_ROOT_USER` and `MINIO_ROOT_PASSWORD`; the container
   refuses to start on an `https://` base URL with the development defaults.
-- Serve Agora and MinIO over HTTPS and set `NEXT_PUBLIC_BASE_URL` / `MINIO_PUBLIC_ENDPOINT`
-  to those public URLs. Do not publish MinIO's console (port 9001); compose binds it to localhost.
-- Keep `SEED_DEMO_DATA=false` and, without Stripe, `ALLOW_FREE_SUBSCRIPTIONS=false`.
+- Serve Agora and the file storage over HTTPS and set `NEXT_PUBLIC_BASE_URL` / `MINIO_PUBLIC_ENDPOINT`
+  to those public URLs. Do not publish MinIO's console (port 9001).
+- Put Agora behind a reverse proxy that sets `X-Forwarded-For` (Caddy, nginx, Traefik and every hosting platform do).
+  The sign-in and sign-up rate limits use it. Behind a CDN or another proxy in front of yours, all visitors can look
+  like one address to the limiter, so rate limit at the CDN too.
+- Keep `SEED_DEMO_DATA=false`, never set `DEMO_MODE` (it wipes the database), and, without Stripe,
+  `ALLOW_FREE_SUBSCRIPTIONS=false`.
 - Set `STRIPE_WEBHOOK_SECRET`; webhook requests without a valid signature are rejected.
-- Back up the `postgres_data` and `minio_data` volumes.
+- Set up [backups](docs/backups.md), keep a copy off the server, and run the restore drill. Backups contain
+  everything, including password hashes and the keys saved in Settings: treat them like a password file.
+- Run a single instance (rate-limit counts and the scheduled-post timer live in the process).
 
-## Design notes
+## What Agora does
 
-- Media is never stored in PostgreSQL. Gated images are served by short-lived presigned URLs
-  after an access check; gated video and audio are streamed through the app.
-- Passwords are hashed with scrypt; sessions are random tokens stored hashed.
-- API keys are stored hashed. Outgoing webhooks are signed (HMAC-SHA256).
-- Creator-configured webhook URLs may point at private network addresses on purpose, so
-  self-hosters can call local services. Only the creator can configure them.
-- Login, sign-up and the API are rate limited in memory per process; add proxy-level limits
-  for public instances.
+- **Passwords** are hashed with scrypt, with a per-password salt. Sign-in takes the same time whether or not the
+  account exists, and sessions are random tokens stored hashed. Changing or resetting a password signs every other
+  device out. Expired sessions are cleared out hourly.
+- **Password reset and email confirmation** links are single-use, expire (an hour and three days), are stored only as
+  hashes, and are shown behind a button so mail scanners cannot use them up. Asking for a reset gives the same answer
+  whether or not the address has an account.
+- **First-run setup** is locked by `SETUP_TOKEN` and creates the owner under a database lock, so two requests at once
+  cannot both become the owner.
+- **Content Security Policy** allows scripts only with a one-time nonce per request (`strict-dynamic`), so injected
+  markup, inline event handlers and `javascript:` links do not run even if they got past escaping. Pages cannot be
+  framed, uploads are limited to an allowlist of types, and anything else is served as a forced download.
+- **Post text** is rendered to elements, never raw HTML. Links get `nofollow ugc`, pictures may only come from this
+  site's own media endpoint, and video embeds are limited to YouTube, Vimeo, Loom and Spotify, built from a parsed id.
+- **Access control**: members-only posts and files are checked on every request (`canView`). Drafts and scheduled
+  posts are visible only to their creator and never reach feeds, search, previews, the media endpoint, the sitemap or
+  the RSS feed. Search never matches the text of a post the searcher cannot open.
+- **Media** is never stored in PostgreSQL. Gated images are served by short-lived presigned URLs after an access check;
+  gated video and audio are streamed through the app.
+- **API keys** are stored hashed. **Outgoing webhooks** are signed (HMAC-SHA256) and may only call public addresses by
+  default: the address a creator types (and what its name resolves to) is checked, so a webhook cannot be used to reach
+  the database, the storage service or a cloud metadata endpoint. Set `WEBHOOK_ALLOW_PRIVATE=true` only if your own
+  automation runs on a private network.
+- **Stripe** webhooks are verified by signature, each event is processed once, and a failed one is retried.
+- **Dependencies** are checked in CI (`npm audit` for production dependencies) and updated through Dependabot.
+
+## Known limits
+
+These are understood and not yet fixed. Plan around them.
+
+- **Rate limits are per process and in memory.** They reset when the server restarts and do not work across several
+  instances. Add limits at your proxy for a busy public site.
+- **Stripe and SMTP credentials saved in Settings are stored in the database in plain text.** Anyone who can read the
+  database (or a backup) can read them. Prefer restricted Stripe keys, and environment variables if you would rather
+  keep secrets out of the database.
+- **Sign-up reveals whether an email is already registered** (it says so). The sign-in and reset forms do not.
+- **Webhook addresses are checked when the webhook is saved and again on each delivery**, but a hostile DNS server
+  could change its answer between the check and the connection. The private-address block is a strong guard, not a
+  sandbox: do not run Agora with credentials it does not need.
+- **The owner's SMTP host is not restricted**, so the owner (who already controls the server's settings) can make it
+  connect to any address.
+- **Styles allow inline rules** (`style-src 'unsafe-inline'`), which theming and Next.js rely on.
+- **Development tooling** (ESLint and TypeScript-ESLint) has open moderate advisories. They affect developers' machines
+  and CI, not the running site.

@@ -1,4 +1,5 @@
 import { createHmac, randomBytes, randomUUID } from "node:crypto";
+import { assertPublicTarget } from "@/lib/net-guard";
 import { prisma } from "@/lib/prisma";
 
 export const WEBHOOK_EVENTS = [
@@ -23,7 +24,7 @@ export function absoluteUrl(path: string): string {
 
 export const newWebhookSecret = () => `whsec_${randomBytes(24).toString("base64url")}`;
 
-// Only http(s) targets are allowed. Private addresses are fine: self-hosters often post to local services.
+// Only http(s) targets are allowed. Whether private addresses are, is decided at delivery (see net-guard.ts).
 export function parseWebhookUrl(raw: string): string | null {
   try {
     const url = new URL(raw);
@@ -44,6 +45,7 @@ const ATTEMPT_DELAYS_MS = [0, 2000, 10000];
 async function attempt(target: Target, event: string, body: string, deliveryId: string) {
   const timestamp = String(Math.floor(Date.now() / 1000));
   try {
+    await assertPublicTarget(target.url);
     const response = await fetch(target.url, {
       method: "POST",
       redirect: "manual",
