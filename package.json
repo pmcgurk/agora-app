@@ -13,7 +13,9 @@
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "eslint .",
-    "demo:seed": "tsx prisma/demo-seed.ts"
+    "demo:seed": "tsx prisma/demo-seed.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.800.0",
@@ -43,6 +45,7 @@
     "prisma": "^7.10.1",
     "tailwindcss": "^3.4.17",
     "tsx": "^4.23.15",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "vitest": "^5.1.0"
   }
 }
