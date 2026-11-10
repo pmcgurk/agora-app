@@ -405,7 +405,7 @@ export async function requestEmailChange(formData: FormData) {
   if (!withinLimit(`email-change:${user.id}`, 5, 60 * 60 * 1000) || !withinLimit(`email-change-ip:${await clientIp()}`, 20, 60 * 60 * 1000)) {
     fail("account", "Too many attempts. Try again later.");
   }
-  if (!/^[^s@]+@[^s@]+.[^s@]+$/.test(newEmail) || newEmail.length > 254) fail("account", "Enter a valid email address.");
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail) || newEmail.length > 254) fail("account", "Enter a valid email address.");
   if (newEmail === user.email) fail("account", "That is already your email address.");
   if (!(await verifyPassword(password, user.passwordHash))) fail("account", "Your password is incorrect.");
 
