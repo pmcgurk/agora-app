@@ -1,5 +1,6 @@
 import { createEmailToken, TOKEN_LIFETIME_MS } from "@/lib/email-tokens";
-import { passwordResetEmail, verifyEmailEmail } from "@/lib/email-templates";
+import { alreadyRegisteredEmail, finishSignupEmail, passwordResetEmail, verifyEmailEmail } from "@/lib/email-templates";
+import { createPendingSignup, SIGNUP_LINK_LIFETIME_MS } from "@/lib/pending-signups";
 import { siteName } from "@/lib/instance";
 import { getMailSettings, sendMail } from "@/lib/mail";
 import { publicUrl } from "@/lib/urls";
@@ -40,5 +41,26 @@ export async function sendVerificationEmail(user: Recipient): Promise<void> {
       url: publicUrl(`/verify-email/${token}`),
       days: TOKEN_LIFETIME_MS.VERIFY_EMAIL / (24 * 60 * 60 * 1000),
     }),
+  );
+}
+
+// Sent to an address that asked to sign up: a link that creates the account when its owner opens it.
+export async function sendFinishSignupEmail(email: string, name: string): Promise<void> {
+  const token = await createPendingSignup(email, name);
+  await sendMail(
+    finishSignupEmail({
+      to: email,
+      siteName: await siteName(),
+      name,
+      url: publicUrl(`/signup/finish/${token}`),
+      hours: SIGNUP_LINK_LIFETIME_MS / (60 * 60 * 1000),
+    }),
+  );
+}
+
+// Sent instead, when the address already has an account, so the answer on screen can be the same either way.
+export async function sendAlreadyRegisteredEmail(user: Recipient): Promise<void> {
+  await sendMail(
+    alreadyRegisteredEmail({ to: user.email, siteName: await siteName(), name: user.name, loginUrl: publicUrl("/login"), resetUrl: publicUrl("/forgot-password") }),
   );
 }

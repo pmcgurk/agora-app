@@ -3,9 +3,10 @@
 import { blockInDemo } from "@/lib/demo-guard";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
-import { mailIsConfigured, sendVerificationEmail } from "@/lib/account-email";
+import { mailIsConfigured, sendAlreadyRegisteredEmail, sendFinishSignupEmail } from "@/lib/account-email";
 import { createSession, destroySession } from "@/lib/auth";
 import { hashPassword, verifyPassword } from "@/lib/password";
+import { findPendingSignup, takePendingSignup } from "@/lib/pending-signups";
 import { needsSetup } from "@/lib/instance";
 import { prisma } from "@/lib/prisma";
 import { clientIp, withinLimit } from "@/lib/rate-limit";
@@ -33,34 +34,78 @@ export async function signup(formData: FormData) {
   await blockInDemo();
   const name = field(formData, "name");
   const email = field(formData, "email").toLowerCase();
-  const password = String(formData.get("password") ?? "");
 
   if (!withinLimit(`signup:${await clientIp()}`, 10, 60 * 60 * 1000)) {
     fail("/signup", "Too many sign-ups from this network. Try again later.");
   }
   if (!name || name.length > 100) fail("/signup", "Enter a name up to 100 characters.");
   if (!EMAIL_PATTERN.test(email) || email.length > 254) fail("/signup", "Enter a valid email address.");
+  // The creator account is made by the setup wizard; public sign-ups are always patrons.
+  if (await needsSetup()) redirect("/setup");
+
+  // With email set up, signing up only sends the address a link; the account is made when its owner opens it
+  // and chooses a password. Whether or not the address already has an account, this answers the same, and the
+  // work happens after the answer, so neither the words nor the timing tell a stranger who is registered.
+  if (await mailIsConfigured()) {
+    if (withinLimit(`signup-mail:${email}`, 3, 60 * 60 * 1000)) {
+      after(async () => {
+        try {
+          const existing = await prisma.user.findUnique({ where: { email }, select: { id: true, name: true, email: true } });
+          if (existing) await sendAlreadyRegisteredEmail(existing);
+          else await sendFinishSignupEmail(email, name);
+        } catch (error) {
+          console.error("Sending the sign-up email failed:", error instanceof Error ? error.message : error);
+        }
+      });
+    }
+    redirect("/signup/check-email");
+  }
+
+  // Without email there is no way to check the address or to reply privately, so the account is made now.
+  const password = String(formData.get("password") ?? "");
   if (password.length < MIN_PASSWORD_LENGTH || password.length > 200) {
     fail("/signup", `Password must be ${MIN_PASSWORD_LENGTH}-200 characters.`);
   }
-
   if (await prisma.user.findUnique({ where: { email }, select: { id: true } })) {
     fail("/signup", "That email is already registered.");
   }
-
-  // The creator account is made by the setup wizard; public sign-ups are always patrons.
-  if (await needsSetup()) redirect("/setup");
-  // With email set up, the address has to be confirmed before the new account can comment or message.
-  // Without it nobody could confirm, so the account starts confirmed.
-  const confirm = await mailIsConfigured();
   const user = await prisma.user.create({
-    data: { name, email, role: "PATRON", passwordHash: await hashPassword(password), emailVerifiedAt: confirm ? null : new Date() },
+    data: { name, email, role: "PATRON", passwordHash: await hashPassword(password), emailVerifiedAt: new Date() },
   });
-  if (confirm) {
-    after(() => sendVerificationEmail(user).catch((error) => console.error("Sending the confirmation email failed:", error instanceof Error ? error.message : error)));
-  }
   await createSession(user.id);
   redirect(landingPath(user.role));
+}
+
+// Finishes a sign-up from the link in the email: the owner of the address chooses a password and the account
+// is created, confirmed and signed in.
+export async function finishSignup(formData: FormData) {
+  await blockInDemo();
+  const token = String(formData.get("token") ?? "");
+  const password = String(formData.get("password") ?? "");
+  const confirm = String(formData.get("confirm") ?? "");
+  const page = `/signup/finish/${encodeURIComponent(token)}`;
+
+  if (!withinLimit(`signup-finish:${await clientIp()}`, 20, 60 * 60 * 1000)) fail(page, "Too many attempts. Try again later.");
+  // Check the link before the passwords, so a typo does not use it up.
+  if (!(await findPendingSignup(token))) fail("/signup", "That link has expired or was already used. Sign up again to get a new one.");
+  if (password.length < MIN_PASSWORD_LENGTH || password.length > 200) fail(page, `Password must be ${MIN_PASSWORD_LENGTH}-200 characters.`);
+  if (password !== confirm) fail(page, "The two passwords do not match.");
+
+  const pending = await takePendingSignup(token);
+  if (!pending) fail("/signup", "That link has expired or was already used. Sign up again to get a new one.");
+  const passwordHash = await hashPassword(password);
+  let userId: string;
+  try {
+    const user = await prisma.user.create({
+      data: { name: pending.name, email: pending.email, role: "PATRON", passwordHash, emailVerifiedAt: new Date() },
+    });
+    userId = user.id;
+  } catch {
+    // The address got an account some other way while the link was waiting.
+    redirect("/login?notice=" + encodeURIComponent("That address already has an account. Log in, or reset your password."));
+  }
+  await createSession(userId);
+  redirect("/?notice=" + encodeURIComponent("Welcome! Your account is ready."));
 }
 
 export async function login(formData: FormData) {

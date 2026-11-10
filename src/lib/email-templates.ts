@@ -102,6 +102,35 @@ export function verifyEmailEmail(input: { to: string; siteName: string; name: st
   };
 }
 
+export function finishSignupEmail(input: { to: string; siteName: string; name: string; url: string; hours: number }): MailMessage {
+  const paragraphs = [
+    `Hi ${input.name}, thanks for signing up to ${input.siteName}. Open the link to choose a password and finish creating your account.`,
+    `The link works once and expires in ${input.hours} hours. If you didn’t ask for this, ignore this email and nothing will be created.`,
+  ];
+  const action = { label: "Finish signing up", url: input.url };
+  return {
+    to: input.to,
+    subject: `Finish signing up to ${input.siteName}`,
+    text: text(paragraphs, action),
+    html: layout(input.siteName, "Finish signing up", paragraphs, action),
+  };
+}
+
+export function alreadyRegisteredEmail(input: { to: string; siteName: string; name: string; loginUrl: string; resetUrl: string }): MailMessage {
+  const paragraphs = [
+    `Hi ${input.name}, someone (hopefully you) tried to sign up to ${input.siteName} with this email address, but it already has an account.`,
+    `You can log in with it. If you’ve forgotten your password, you can reset it: ${input.resetUrl}`,
+    "If it wasn’t you, you can ignore this email. Nothing has changed on your account.",
+  ];
+  const action = { label: "Log in", url: input.loginUrl };
+  return {
+    to: input.to,
+    subject: `You already have an account on ${input.siteName}`,
+    text: text(paragraphs, action),
+    html: layout(input.siteName, "You already have an account", paragraphs, action),
+  };
+}
+
 export function testEmail(input: { to: string; siteName: string }): MailMessage {
   const paragraphs = [`This is a test email from ${input.siteName}. If you can read it, outgoing mail works.`];
   return {

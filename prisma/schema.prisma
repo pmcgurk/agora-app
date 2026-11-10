@@ -480,3 +480,14 @@ model EmailToken {
 
   @@index([userId, kind])
 }
+
+// A sign-up waiting for the address owner to finish it from the link in their email. Only a hash of the link is
+// stored. Nothing here is an account: it cannot log in, so a stranger who types someone else's address gets nothing.
+model PendingSignup {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}

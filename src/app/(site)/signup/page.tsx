@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { signup } from "@/app/actions/auth";
 import { signupCreator } from "@/app/actions/creators";
 import { buttonClass, cardClass, inputClass, linkClass } from "@/components/ui";
+import { mailIsConfigured } from "@/lib/account-email";
 import { getCreatorSettings } from "@/lib/instance";
 
 export default async function SignupPage({
@@ -16,6 +17,8 @@ export default async function SignupPage({
   const applications = settings.multiCreator && settings.signup === "APPROVAL";
   if (as === "creator" && !creatorsOpen) redirect("/signup");
   const creator = as === "creator" && creatorsOpen;
+  // With email set up, patrons sign up with just a name and address and choose a password from the emailed link.
+  const byEmail = !creator && (await mailIsConfigured());
 
   return (
     <main className="mx-auto max-w-sm px-4 py-16">
@@ -49,12 +52,16 @@ export default async function SignupPage({
             Email
             <input name="email" type="email" required autoComplete="email" className={inputClass} />
           </label>
-          <label className="block space-y-1 text-sm font-medium">
-            Password
-            <span className="block text-xs font-normal text-muted">At least 10 characters.</span>
-            <input name="password" type="password" required minLength={10} autoComplete="new-password" className={inputClass} />
-          </label>
-          <button className={`${buttonClass} w-full text-center`}>{creator ? "Create creator account" : "Sign up"}</button>
+          {byEmail ? (
+            <p className="text-sm text-muted">We&apos;ll email you a link to choose a password and finish signing up.</p>
+          ) : (
+            <label className="block space-y-1 text-sm font-medium">
+              Password
+              <span className="block text-xs font-normal text-muted">At least 10 characters.</span>
+              <input name="password" type="password" required minLength={10} autoComplete="new-password" className={inputClass} />
+            </label>
+          )}
+          <button className={`${buttonClass} w-full text-center`}>{creator ? "Create creator account" : byEmail ? "Send me the link" : "Sign up"}</button>
         </form>
       </div>
       <div className="mt-4 space-y-2 text-center text-sm text-muted">
