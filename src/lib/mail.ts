@@ -15,7 +15,8 @@ export type MailSettings = {
   from: string;
 };
 
-export type MailMessage = { to: string; subject: string; text: string; html: string };
+// headers: extra mail headers, such as List-Unsubscribe on bulk mail.
+export type MailMessage = { to: string; subject: string; text: string; html: string; headers?: Record<string, string> };
 
 export type MailResult = { ok: true } | { ok: false; error: string };
 

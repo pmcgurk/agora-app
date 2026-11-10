@@ -54,8 +54,8 @@ export async function sendVerificationEmail(user: Recipient): Promise<void> {
 }
 
 // Sent to an address that asked to sign up: a link that creates the account when its owner opens it.
-export async function sendFinishSignupEmail(email: string, name: string): Promise<void> {
-  const token = await createPendingSignup(email, name);
+export async function sendFinishSignupEmail(email: string, name: string, emailPosts = false): Promise<void> {
+  const token = await createPendingSignup(email, name, emailPosts);
   await sendMail(
     finishSignupEmail({
       to: email,

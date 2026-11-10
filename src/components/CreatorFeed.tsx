@@ -1,3 +1,4 @@
+import { setEmailPosts } from "@/app/actions/notifications";
 import EndPlan from "@/components/EndPlan";
 import Link from "next/link";
 import { after } from "next/server";
@@ -10,6 +11,7 @@ import { activeSubscriptionWhere, getAccessContext } from "@/lib/access";
 import NewPostsBanner from "@/components/NewPostsBanner";
 import { cleanSearch, fetchPosts, MAX_SEARCH_LENGTH, pageSizeOf } from "@/lib/feed";
 import { patronCanMessage } from "@/lib/dm";
+import { mailIsConfigured } from "@/lib/account-email";
 import { getCurrentUser } from "@/lib/auth";
 import { creatorPath, getCreator, supportPath } from "@/lib/creator";
 import { prisma } from "@/lib/prisma";
@@ -58,6 +60,8 @@ export default async function CreatorFeed({
     tiers.filter((tier) => subscriptions.some((subscription) => subscription.tierId === tier.id)).at(-1) ?? null;
   const memberPlan = subscriptions.find((subscription) => subscription.tierId === memberTier?.id) ?? null;
   const base = creatorPath(creator);
+  // Members of a site that can send email may ask for new posts by email, right from the page they follow.
+  const emailOffer = viewer?.role === "PATRON" && viewer.id !== creator.id && memberTier !== null && (await mailIsConfigured());
   const supportHref = await supportPath(creator);
   const dmGate =
     viewer !== null && viewer.id !== creator.id && viewer.role === "PATRON" && !access.blocked
@@ -79,6 +83,13 @@ export default async function CreatorFeed({
           )}
           {memberPlan && !memberPlan.gifted && memberTier && viewer?.role === "PATRON" && (
             <EndPlan subscription={memberPlan} paid={memberTier.price > 0} returnTo={base} />
+          )}
+          {emailOffer && viewer && (
+            <form action={setEmailPosts}>
+              <input type="hidden" name="returnTo" value={base} />
+              {!viewer.emailPosts && <input type="hidden" name="emailPosts" value="on" />}
+              <button className="text-sm underline">{viewer.emailPosts ? "Stop emailing me new posts" : "Email me new posts"}</button>
+            </form>
           )}
           {dmLocked && <span className="text-sm text-muted">{dmLocked}</span>}
           {canMessage && <Link href={`/messages/${creator.id}`} className={linkClass}>Message</Link>}

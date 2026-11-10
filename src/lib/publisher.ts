@@ -1,4 +1,5 @@
 import { cleanExpired } from "./housekeeping";
+import { sendQueuedPostEmails } from "./post-emails";
 import { announceDuePosts } from "./publishing";
 
 // Runs every minute inside the server. It tells subscribers about scheduled posts as their time comes and does
@@ -12,6 +13,7 @@ let ticks = 0;
 async function tick() {
   try {
     await announceDuePosts();
+    await sendQueuedPostEmails();
     // Once an hour, throw away sessions and email links that can never be used again.
     if (ticks++ % 60 === 0) await cleanExpired();
   } catch (error) {

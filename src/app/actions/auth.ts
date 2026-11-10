@@ -52,7 +52,7 @@ export async function signup(formData: FormData) {
         try {
           const existing = await prisma.user.findUnique({ where: { email }, select: { id: true, name: true, email: true } });
           if (existing) await sendAlreadyRegisteredEmail(existing);
-          else await sendFinishSignupEmail(email, name);
+          else await sendFinishSignupEmail(email, name, formData.get("emailPosts") === "on");
         } catch (error) {
           console.error("Sending the sign-up email failed:", error instanceof Error ? error.message : error);
         }
@@ -97,7 +97,7 @@ export async function finishSignup(formData: FormData) {
   let userId: string;
   try {
     const user = await prisma.user.create({
-      data: { name: pending.name, email: pending.email, role: "PATRON", passwordHash, emailVerifiedAt: new Date() },
+      data: { name: pending.name, email: pending.email, role: "PATRON", passwordHash, emailVerifiedAt: new Date(), emailPosts: pending.emailPosts },
     });
     userId = user.id;
   } catch {

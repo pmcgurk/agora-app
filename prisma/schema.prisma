@@ -73,6 +73,11 @@ model User {
   notifyLikes      Boolean          @default(true)
   notifyPosts      Boolean          @default(true)
   notifyReplies    Boolean          @default(true)
+  // Members can ask to be emailed when a creator they follow publishes. Off until they choose it.
+  emailPosts       Boolean          @default(false)
+  // A secret in the unsubscribe link of those emails, so it works without logging in.
+  unsubscribeToken String           @unique @default(dbgenerated("replace(((gen_random_uuid())::text || (gen_random_uuid())::text), '-'::text, ''::text)"))
+  postEmails       PostEmail[]
   // Creators can switch direct messages from patrons on or off.
   allowDMs         Boolean          @default(false)
   // When set, only patrons on this tier (or a pricier one) can message the creator.
@@ -186,6 +191,7 @@ model Post {
   // Lets viewers without access watch the first N seconds of each video.
   previewSeconds   Int?
   media            PostMedia[]
+  emails           PostEmail[]
   creator          User          @relation("CreatorPosts", fields: [creatorId], references: [id], onDelete: Cascade)
   minTier          Tier?         @relation("MinimumTier", fields: [minTierId], references: [id], onDelete: SetNull)
 
@@ -491,7 +497,25 @@ model PendingSignup {
   id        String   @id @default(cuid())
   email     String   @unique
   name      String
+  // Whether they ticked "email me new posts" when signing up.
+  emailPosts Boolean @default(false)
   tokenHash String   @unique
   expiresAt DateTime
   createdAt DateTime @default(now())
+}
+
+// A new-post email for one member: queued when the post goes live, sent by a timer, never sent twice.
+model PostEmail {
+  id        String    @id @default(cuid())
+  postId    String
+  userId    String
+  createdAt DateTime  @default(now())
+  sentAt    DateTime?
+  attempts  Int       @default(0)
+  lastError String?
+  post      Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@index([sentAt, createdAt])
 }

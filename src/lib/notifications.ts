@@ -1,6 +1,7 @@
 import { activeSubscriptionWhere } from "@/lib/access";
 import { postPath } from "@/lib/creator";
 import { formatMoney } from "@/lib/currency";
+import { queuePostEmails } from "@/lib/post-emails";
 import { prisma } from "@/lib/prisma";
 import { absoluteUrl, emitEvent } from "@/lib/webhooks";
 
@@ -169,6 +170,8 @@ export async function notifyNewPost(postId: string): Promise<void> {
       href,
     })),
   );
+  // Members who asked for email get it too; the queue is sent a few at a time by the publisher timer.
+  await queuePostEmails(post.id).catch((error) => console.error("Queueing new-post emails failed:", error instanceof Error ? error.message : error));
 }
 
 export async function notifyMessage(messageId: string): Promise<void> {

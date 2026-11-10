@@ -1,6 +1,7 @@
 import { saveNotifications } from "@/app/actions/settings";
 import Flash from "@/components/Flash";
 import { buttonClass } from "@/components/ui";
+import { mailIsConfigured } from "@/lib/account-email";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
@@ -21,6 +22,7 @@ export default async function NotificationSettings({
       ])
     : [[], []];
   const mutedIds = new Set(muted.map((mute) => mute.tierId));
+  const canEmail = await mailIsConfigured();
 
   return (
     <section className="space-y-4">
@@ -57,6 +59,20 @@ export default async function NotificationSettings({
               <input type="checkbox" name="replies" defaultChecked={user.notifyReplies} />
               Replies to my comments
             </label>
+            <fieldset className="space-y-1">
+              <legend className="font-medium">By email</legend>
+              {canEmail ? (
+                <>
+                  <label className="flex items-center gap-2">
+                    <input type="checkbox" name="emailPosts" defaultChecked={user.emailPosts} />
+                    Email me when someone I follow publishes a new post
+                  </label>
+                  <p className="text-sm text-muted">Every email has an unsubscribe link. Sent to {user.email}.</p>
+                </>
+              ) : (
+                <p className="text-sm text-muted">This site can&apos;t send email, so new posts only show up here.</p>
+              )}
+            </fieldset>
           </>
         )}
         <button className={buttonClass}>Save</button>

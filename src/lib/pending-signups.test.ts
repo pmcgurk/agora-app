@@ -28,8 +28,8 @@ describe("pending sign-ups", () => {
   });
 
   it("finds a live link, and refuses expired, unknown and malformed ones", async () => {
-    findUnique.mockResolvedValueOnce({ email: "pat@example.com", name: "Pat", expiresAt: new Date(Date.now() + 60_000) });
-    expect(await findPendingSignup(GOOD)).toEqual({ email: "pat@example.com", name: "Pat" });
+    findUnique.mockResolvedValueOnce({ email: "pat@example.com", name: "Pat", emailPosts: true, expiresAt: new Date(Date.now() + 60_000) });
+    expect(await findPendingSignup(GOOD)).toEqual({ email: "pat@example.com", name: "Pat", emailPosts: true });
     findUnique.mockResolvedValueOnce({ email: "pat@example.com", name: "Pat", expiresAt: new Date(Date.now() - 1) });
     expect(await findPendingSignup(GOOD)).toBeNull();
     findUnique.mockResolvedValueOnce(null);
@@ -40,9 +40,9 @@ describe("pending sign-ups", () => {
   });
 
   it("gives the sign-up to only one of two simultaneous uses of a link", async () => {
-    findUnique.mockResolvedValue({ email: "pat@example.com", name: "Pat", expiresAt: new Date(Date.now() + 60_000) });
+    findUnique.mockResolvedValue({ email: "pat@example.com", name: "Pat", emailPosts: false, expiresAt: new Date(Date.now() + 60_000) });
     deleteMany.mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 0 });
-    expect(await takePendingSignup(GOOD)).toEqual({ email: "pat@example.com", name: "Pat" });
+    expect(await takePendingSignup(GOOD)).toEqual({ email: "pat@example.com", name: "Pat", emailPosts: false });
     expect(await takePendingSignup(GOOD)).toBeNull();
   });
 });

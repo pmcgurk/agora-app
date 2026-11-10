@@ -53,7 +53,13 @@ export default async function SignupPage({
             <input name="email" type="email" required autoComplete="email" className={inputClass} />
           </label>
           {byEmail ? (
-            <p className="text-sm text-muted">We&apos;ll email you a link to choose a password and finish signing up.</p>
+            <>
+              <p className="text-sm text-muted">We&apos;ll email you a link to choose a password and finish signing up.</p>
+              <label className="flex items-start gap-2 text-sm">
+                <input type="checkbox" name="emailPosts" className="mt-1" />
+                <span>Email me when new posts are published. You can stop any time.</span>
+              </label>
+            </>
           ) : (
             <label className="block space-y-1 text-sm font-medium">
               Password

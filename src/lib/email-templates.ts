@@ -185,6 +185,38 @@ export function accountDeletedEmail(input: { to: string; siteName: string; name:
   };
 }
 
+// The email a member gets when a creator they follow publishes. Every one carries a one-click unsubscribe.
+export function newPostEmail(input: {
+  to: string;
+  siteName: string;
+  creatorName: string;
+  title: string;
+  excerpt: string;
+  postUrl: string;
+  unsubscribeUrl: string;
+  oneClickUnsubscribeUrl: string;
+}): MailMessage {
+  const paragraphs = [`${input.creatorName} just published a new post.`, ...(input.excerpt ? [input.excerpt] : [])];
+  const action = { label: "Read the post", url: input.postUrl };
+  const footer = `You get this because you asked for emails when ${input.creatorName} posts on ${input.siteName}. Unsubscribe: ${input.unsubscribeUrl}`;
+  return {
+    to: input.to,
+    subject: `New post: ${input.title}`,
+    text: `${text([`${input.title}`, ...paragraphs], action)}
+
+--
+${footer}`,
+    html: layout(input.siteName, input.title, paragraphs, action).replace(
+      /You received this because of activity on [^<]*./,
+      `You get this because you asked for emails when ${escape(input.creatorName)} posts. <a href="${escape(input.unsubscribeUrl)}">Unsubscribe</a>.`,
+    ),
+    headers: {
+      "List-Unsubscribe": `<${input.oneClickUnsubscribeUrl}>`,
+      "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+    },
+  };
+}
+
 export function testEmail(input: { to: string; siteName: string }): MailMessage {
   const paragraphs = [`This is a test email from ${input.siteName}. If you can read it, outgoing mail works.`];
   return {

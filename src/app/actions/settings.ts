@@ -477,7 +477,9 @@ export async function saveNotifications(formData: FormData) {
       prisma.tierMute.createMany({ data: muted.map((tier) => ({ userId: user.id, tierId: tier.id })) }),
     ]);
   } else {
-    await prisma.user.update({ where: { id: user.id }, data: { notifyPosts: on("posts"), notifyReplies: on("replies") } });
+    // Email is opt-in, and only for confirmed addresses on a site that can send it.
+    const wantsEmail = on("emailPosts") && (await mailIsConfigured()) && user.emailVerifiedAt !== null;
+    await prisma.user.update({ where: { id: user.id }, data: { notifyPosts: on("posts"), notifyReplies: on("replies"), emailPosts: wantsEmail } });
   }
   done("notifications");
 }
