@@ -49,7 +49,7 @@ jobs:
     env:
       E2E_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/agora_e2e?schema=public
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 22
