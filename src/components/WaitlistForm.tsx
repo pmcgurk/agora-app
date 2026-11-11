@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { joinWaitlist, type WaitlistState } from "@/app/actions/demo";
 import { buttonClass, inputClass } from "@/components/ui";
+import { submitKeepingFields } from "@/lib/form-submit";
 
 export default function WaitlistForm({ contact }: { contact: string }) {
   const [state, action, pending] = useActionState<WaitlistState, FormData>(joinWaitlist, {});
@@ -15,7 +16,7 @@ export default function WaitlistForm({ contact }: { contact: string }) {
     );
   }
   return (
-    <form action={action} className="space-y-2">
+    <form onSubmit={submitKeepingFields(action)} className="space-y-2">
       <div className="flex flex-col gap-2 sm:flex-row">
         <label className="sr-only" htmlFor="waitlist-email">Email address</label>
         <input id="waitlist-email" name="email" type="email" required maxLength={254} autoComplete="email" placeholder="you@example.com" className={inputClass} />

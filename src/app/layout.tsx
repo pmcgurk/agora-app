@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import "./globals.css";
 import DemoBanner from "@/components/DemoBanner";
 import FontLink from "@/components/FontLink";
+import FormMemory from "@/components/FormMemory";
 import ThemeCss from "@/components/ThemeCss";
 import { isDemoMode } from "@/lib/demo";
 import { markdownExcerpt } from "@/lib/excerpt";
@@ -50,6 +51,10 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
         {creator && <FontLink fonts={creator} settings={creator.themeSettings} />}
         {creator && <ThemeCss settings={creator.themeSettings} />}
         <DemoBanner />
+        {/* Keeps what was typed in a form when the server sends you back to it with an error. */}
+        <Suspense fallback={null}>
+          <FormMemory />
+        </Suspense>
         {children}
       </body>
     </html>

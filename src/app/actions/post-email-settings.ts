@@ -9,7 +9,7 @@ import { buildPreview, parseChoice } from "@/lib/newsletter-preview";
 import { prisma } from "@/lib/prisma";
 import { withinLimit } from "@/lib/rate-limit";
 
-const PAGE = "/settings/newsletter";
+const PAGE = "/settings/post-emails";
 
 function text(formData: FormData, name: string): string {
   const value = formData.get(name);
@@ -22,7 +22,7 @@ function back(kind: "notice" | "error", message: string, extra = ""): never {
 
 // How a creator's new-post emails look and who they come from. The email they signed up with is never used for
 // either: the name is their own choice (their public name by default) and replies go only to an address they type here.
-export async function saveNewsletterSettings(formData: FormData) {
+export async function savePostEmailSettings(formData: FormData) {
   await blockInDemo();
   const user = await requireUser("CREATOR");
 

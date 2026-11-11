@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import type { CommentFormState } from "@/app/actions/social";
 import { buttonClass, inputClass } from "@/components/ui";
+import { submitKeepingFields } from "@/lib/form-submit";
 
 export default function CommentForm({
   postId,
@@ -15,7 +16,7 @@ export default function CommentForm({
 }) {
   const [state, formAction, pending] = useActionState(action, {});
   return (
-    <form action={formAction} className="space-y-2">
+    <form onSubmit={submitKeepingFields(formAction)} className="space-y-2">
       <input type="hidden" name="postId" value={postId} />
       {parentId && <input type="hidden" name="parentId" value={parentId} />}
       <label className="block">

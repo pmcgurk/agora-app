@@ -5,6 +5,7 @@ import { useActionState, useCallback, useEffect, useRef, useState } from "react"
 import { createPost, updatePost, type PostFormState } from "@/app/actions/creator";
 import { buttonClass, inputClass } from "@/components/ui";
 import MarkdownEditor from "@/components/MarkdownEditor";
+import { submitKeepingFields } from "@/lib/form-submit";
 import { ACCEPT_ATTRIBUTE, describeUpload, formatBytes as formatSize, MAX_FILES_PER_POST, type MediaKindName } from "@/lib/media";
 
 type Tier = { id: string; name: string; price: number };
@@ -218,7 +219,7 @@ export default function PostComposer({ tiers, post }: { tiers: Tier[]; post?: Ex
     );
 
   return (
-    <form action={formAction} className="space-y-4">
+    <form onSubmit={submitKeepingFields(formAction)} className="space-y-4">
       {post && <input type="hidden" name="postId" value={post.id} />}
       <label className="block">
         Title
@@ -332,7 +333,7 @@ export default function PostComposer({ tiers, post }: { tiers: Tier[]; post?: Ex
             {post && (
               <>
                 {" "}
-                <Link href={`/settings/newsletter?kind=post&postId=${post.id}`} className="underline">
+                <Link href={`/settings/post-emails?kind=post&postId=${post.id}`} className="underline">
                   See how the email looks
                 </Link>
                 .

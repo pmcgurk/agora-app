@@ -1,4 +1,4 @@
-import { saveNewsletterSettings, sendTestEmail } from "@/app/actions/newsletter";
+import { savePostEmailSettings, sendTestEmail } from "@/app/actions/post-email-settings";
 import EmailPreview from "@/components/EmailPreview";
 import Flash from "@/components/Flash";
 import { buttonClass, inputClass } from "@/components/ui";
@@ -10,7 +10,7 @@ import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
-export default async function NewsletterSettings({
+export default async function PostEmailSettings({
   searchParams,
 }: {
   searchParams: Promise<{ notice?: string; error?: string; kind?: string; postId?: string; format?: string }>;
@@ -37,18 +37,18 @@ export default async function NewsletterSettings({
   return (
     <section className="space-y-8">
       <div className="space-y-4">
-        <h2 className="text-xl font-semibold">Newsletter</h2>
+        <h2 className="text-xl font-semibold">Post emails</h2>
         <Flash notice={params.notice} error={params.error} />
         <p className="text-sm text-muted">
           Members who asked for emails get your new posts by email, in the colours and fonts of your blog. Turn emailing off for a single post
           in the post editor.
         </p>
-        <form action={saveNewsletterSettings} className="space-y-4">
+        <form action={savePostEmailSettings} className="space-y-4">
           <label className="block">
             What goes in the email
             <select name="newsletterFormat" defaultValue={user.newsletterFormat} className={inputClass}>
               <option value="EXCERPT">A short taste and a button to read it on the site</option>
-              <option value="FULL">The whole post, as a newsletter</option>
+              <option value="FULL">The whole post</option>
             </select>
             <span className="mt-1 block text-sm text-muted">
               Only people who are allowed to read a post get it. Pictures are included for public posts; for members-only posts, and videos, the email links back to the site.
@@ -80,7 +80,7 @@ export default async function NewsletterSettings({
           <label className="block sm:col-span-3 lg:col-span-1">
             Email
             <select name="kind" defaultValue={selectedKind} className={inputClass}>
-              <option value="post">A new post (newsletter)</option>
+              <option value="post">A new post</option>
               {SYSTEM_EMAIL_KINDS.map((kind) => (
                 <option key={kind.key} value={kind.key}>{kind.label}</option>
               ))}

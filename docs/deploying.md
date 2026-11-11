@@ -110,7 +110,7 @@ With email set up:
 - members can change their email address (confirmed at the new one) and ask for new posts by email, with a one-click
   unsubscribe in every message. A timer inside the server sends 50 a minute;
 - creators choose whether a new post goes out as a short taste or the whole post, the name it appears to come from and an
-  optional reply-to address (Settings > Newsletter), and can send themselves a test. Every email goes out from the site's own
+  optional reply-to address (Settings > Post emails), and can send themselves a test. Every email goes out from the site's own
   sending address (`MAIL_FROM`); a creator only changes the name next to it.
 
 Use a mail provider that allows this kind of mail from your sending domain, set up SPF and DKIM for it, and keep an eye on
