@@ -26,6 +26,7 @@ import {
   type TeaserSettings,
 } from "@/lib/post-media";
 import { notifyRefund } from "@/lib/notifications";
+import { sendRefundNotices } from "@/lib/payment-emails";
 import { announceIfDue, isLive } from "@/lib/publishing";
 import { uniquePostSlug } from "@/lib/slugs";
 import { formatMoney } from "@/lib/currency";
@@ -535,8 +536,10 @@ export async function refundPayment(formData: FormData) {
   }
   const { patronId, tierId } = payment;
   const who = payment.kind === "TIP" ? tipperLabel(payment) : (payment.patron?.name ?? "the patron");
-  await prisma.$transaction([
-    prisma.payment.update({ where: { id: payment.id }, data: { status: "REFUNDED", refundedAt: new Date() } }),
+  // Stripe may tell us about the refund (a webhook) at the same moment. Whoever changes PAID to REFUNDED first is
+  // the one that emails the patron, so they get exactly one email.
+  const [marked] = await prisma.$transaction([
+    prisma.payment.updateMany({ where: { id: payment.id, status: "PAID" }, data: { status: "REFUNDED", refundedAt: new Date() } }),
     ...(patronId && tierId
       ? [
           prisma.subscription.updateMany({
@@ -555,6 +558,7 @@ export async function refundPayment(formData: FormData) {
       await endPlan(plan.id, { atPeriodEnd: false }).catch((error) => console.error("Could not cancel Stripe plan", error));
     }
   }
+  if (marked.count > 0) await sendRefundNotices([payment.id]);
   if (patronId) await notifyRefund(patronId, `${user.name} refunded your ${amount} payment`);
   emitEvent(user.id, "member.refunded", {
     payment: { id: payment.id, amount: payment.amount, currency: payment.currency },
