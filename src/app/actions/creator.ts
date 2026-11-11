@@ -269,7 +269,8 @@ export async function createPost(_previous: PostFormState, formData: FormData): 
   } catch (error) {
     console.error("Publishing post failed", error);
     await deleteObjects(created);
-    return { error: "Could not publish the post. Check that the files are valid and try again." };
+    // Only blame the files when there are some; otherwise the cause is on the server and in its log.
+    return { error: form.items.length > 0 ? "Could not publish the post. Check that the files are valid and try again." : "Could not publish the post. Something went wrong on the server: the details are in its log." };
   }
   // Only tells subscribers when the post is live; scheduled posts are announced when their time comes.
   await announceIfDue(postId);
@@ -381,7 +382,7 @@ export async function updatePost(_previous: PostFormState, formData: FormData): 
   } catch (error) {
     console.error("Updating post failed", error);
     await deleteObjects(created);
-    return { error: "Could not save the post. Check that the files are valid and try again." };
+    return { error: form.items.length > 0 ? "Could not save the post. Check that the files are valid and try again." : "Could not save the post. Something went wrong on the server: the details are in its log." };
   }
   await deleteObjects(obsolete);
   await announceIfDue(post.id);
