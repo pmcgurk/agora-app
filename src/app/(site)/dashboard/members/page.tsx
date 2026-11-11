@@ -44,6 +44,11 @@ export default async function MembersPage({
             <span className="font-medium">{subscription.patron.name}</span>
             <span className="text-muted">{subscription.patron.email}</span>
             <span>{subscription.tier.name}</span>
+            {subscription.paymentFailedAt && (
+              <span className="rounded-full bg-danger/10 px-2 text-xs text-danger" title="Their last renewal payment failed. They keep access for a few days while the card is retried.">
+                payment failing
+              </span>
+            )}
             {subscription.gifted && (
               <span className="rounded-full bg-secondary px-2 text-xs">
                 gift{subscription.expiresAt ? ` until ${subscription.expiresAt.toISOString().slice(0, 10)}` : ""}

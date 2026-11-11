@@ -26,6 +26,7 @@ import {
   type TeaserSettings,
 } from "@/lib/post-media";
 import { notifyRefund } from "@/lib/notifications";
+import { sendRefundNotices } from "@/lib/payment-emails";
 import { announceIfDue, isLive } from "@/lib/publishing";
 import { uniquePostSlug } from "@/lib/slugs";
 import { formatMoney } from "@/lib/currency";
@@ -191,6 +192,8 @@ async function readPostForm(creatorId: string, formData: FormData) {
     items,
     schedule,
     allowBlurPreview: !isPublic && formData.get("allowBlurPreview") === "on",
+    // The composer always sends this checkbox, so a missing value means it was switched off.
+    sendEmail: formData.get("sendEmail") === "on",
     clearThumbnail: !isPublic && formData.get("clearThumbnail") === "on",
     previewSeconds:
       !isPublic && requestedSeconds >= 1 ? Math.min(requestedSeconds, MAX_PREVIEW_SECONDS) : null,
@@ -255,6 +258,7 @@ export async function createPost(_previous: PostFormState, formData: FormData): 
         isPublic: form.isPublic,
         minTierId: form.minTierId,
         allowBlurPreview: form.allowBlurPreview,
+        sendEmail: form.sendEmail,
         clearThumbnail: form.clearThumbnail,
         previewSeconds: form.previewSeconds,
         publishedAt: form.schedule.kind === "draft" ? null : form.schedule.kind === "at" ? form.schedule.at : new Date(),
@@ -265,7 +269,8 @@ export async function createPost(_previous: PostFormState, formData: FormData): 
   } catch (error) {
     console.error("Publishing post failed", error);
     await deleteObjects(created);
-    return { error: "Could not publish the post. Check that the files are valid and try again." };
+    // Only blame the files when there are some; otherwise the cause is on the server and in its log.
+    return { error: form.items.length > 0 ? "Could not publish the post. Check that the files are valid and try again." : "Could not publish the post. Something went wrong on the server: the details are in its log." };
   }
   // Only tells subscribers when the post is live; scheduled posts are announced when their time comes.
   await announceIfDue(postId);
@@ -362,6 +367,7 @@ export async function updatePost(_previous: PostFormState, formData: FormData): 
           isPublic: form.isPublic,
           minTierId: form.minTierId,
           allowBlurPreview: form.allowBlurPreview,
+          sendEmail: form.sendEmail,
           clearThumbnail: form.clearThumbnail,
           previewSeconds: form.previewSeconds,
           publishedAt,
@@ -376,7 +382,7 @@ export async function updatePost(_previous: PostFormState, formData: FormData): 
   } catch (error) {
     console.error("Updating post failed", error);
     await deleteObjects(created);
-    return { error: "Could not save the post. Check that the files are valid and try again." };
+    return { error: form.items.length > 0 ? "Could not save the post. Check that the files are valid and try again." : "Could not save the post. Something went wrong on the server: the details are in its log." };
   }
   await deleteObjects(obsolete);
   await announceIfDue(post.id);
@@ -535,8 +541,10 @@ export async function refundPayment(formData: FormData) {
   }
   const { patronId, tierId } = payment;
   const who = payment.kind === "TIP" ? tipperLabel(payment) : (payment.patron?.name ?? "the patron");
-  await prisma.$transaction([
-    prisma.payment.update({ where: { id: payment.id }, data: { status: "REFUNDED", refundedAt: new Date() } }),
+  // Stripe may tell us about the refund (a webhook) at the same moment. Whoever changes PAID to REFUNDED first is
+  // the one that emails the patron, so they get exactly one email.
+  const [marked] = await prisma.$transaction([
+    prisma.payment.updateMany({ where: { id: payment.id, status: "PAID" }, data: { status: "REFUNDED", refundedAt: new Date() } }),
     ...(patronId && tierId
       ? [
           prisma.subscription.updateMany({
@@ -555,6 +563,7 @@ export async function refundPayment(formData: FormData) {
       await endPlan(plan.id, { atPeriodEnd: false }).catch((error) => console.error("Could not cancel Stripe plan", error));
     }
   }
+  if (marked.count > 0) await sendRefundNotices([payment.id]);
   if (patronId) await notifyRefund(patronId, `${user.name} refunded your ${amount} payment`);
   emitEvent(user.id, "member.refunded", {
     payment: { id: payment.id, amount: payment.amount, currency: payment.currency },

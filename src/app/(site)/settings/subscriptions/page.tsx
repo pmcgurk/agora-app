@@ -22,15 +22,44 @@ export default async function SubscriptionSettings({
   if (user.role !== "PATRON") redirect("/settings/profile");
   const { notice, error } = await searchParams;
   const subscriptions = await prisma.subscription.findMany({
-    where: { patronId: user.id, ...activeSubscriptionWhere() },
+    // Plans with a failed payment stay listed after their access runs out, so the patron can see why and fix it.
+    where: {
+      patronId: user.id,
+      OR: [activeSubscriptionWhere(), { status: "PAST_DUE" }, { status: "ACTIVE", paymentFailedAt: { not: null } }],
+    },
     include: { tier: { include: { creator: { select: { id: true, slug: true, name: true, currency: true } } } } },
     orderBy: { createdAt: "desc" },
   });
+
+  const stripeOn = (await paymentMode()) === "stripe";
+  const now = new Date();
+  const failing = subscriptions.filter((subscription) => subscription.status === "PAST_DUE" || subscription.paymentFailedAt !== null);
 
   return (
     <section className="space-y-4">
       <h2 className="text-xl font-semibold">Subscriptions</h2>
       <Flash notice={notice} error={error} />
+      {failing.length > 0 && (
+        <div role="alert" className="space-y-2 rounded-theme border border-danger bg-danger/10 p-4">
+          <p className="font-semibold text-danger">Your last payment didn’t go through</p>
+          {failing.map((subscription) => {
+            const stillHasAccess = subscription.status === "ACTIVE" && (!subscription.expiresAt || subscription.expiresAt > now);
+            return (
+              <p key={subscription.id} className="text-sm">
+                {subscription.tier.name} · {subscription.tier.creator.name}:{" "}
+                {stillHasAccess && subscription.expiresAt
+                  ? `you keep access until ${subscription.expiresAt.toISOString().slice(0, 10)} while we retry. Update your card to keep it.`
+                  : "access has paused. Update your card to get it back."}
+              </p>
+            );
+          })}
+          {stripeOn && (
+            <form action={openBillingPortal}>
+              <button className="text-sm font-medium underline">Update my card</button>
+            </form>
+          )}
+        </div>
+      )}
       <ul className="space-y-3">
         {subscriptions.map((subscription) => (
           <li key={subscription.id} className="flex flex-wrap items-center gap-3 rounded-theme bg-secondary p-3">
@@ -46,7 +75,7 @@ export default async function SubscriptionSettings({
         ))}
         {subscriptions.length === 0 && <li className="text-muted">You are not following anyone yet.</li>}
       </ul>
-      {(await paymentMode()) === "stripe" && subscriptions.some((subscription) => subscription.tier.price > 0 && !subscription.gifted) && (
+      {stripeOn && subscriptions.some((subscription) => subscription.tier.price > 0 && !subscription.gifted) && (
         <form action={openBillingPortal}>
           <button className="text-sm underline">Manage billing and invoices</button>
         </form>

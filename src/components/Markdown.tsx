@@ -1,5 +1,6 @@
 import { Fragment, type ReactNode } from "react";
 import { parseEmbed } from "@/lib/embeds";
+import { BULLET, FENCE, HEADING, INLINE, MEDIA_PATH, ORDERED, QUOTE, RULE, safeHref, STANDALONE_IMAGE, STANDALONE_LINK } from "@/lib/markdown-syntax";
 
 // A small, dependency-free Markdown renderer. It builds React elements (never raw HTML), so post
 // text cannot inject markup or scripts. Supports headings, bold, italic, strikethrough, inline code,
@@ -10,23 +11,6 @@ export type MarkdownContext = {
   // this site's own media endpoint, so the post text cannot load images from anywhere else.
   resolveImage?: (src: string) => string | null;
 };
-
-const INLINE =
-  /`([^`\n]+)`|\*\*([^\n]+?)\*\*|__([^\n]+?)__|~~([^\n]+?)~~|\*([^*\n]+?)\*|(?<![\w])_([^_\n]+?)_(?![\w])|!\[([^\]\n]*)\]\(([^)\s]+)\)|\[([^\]\n]+)\]\(([^)\s]+)\)|(https?:\/\/[^\s<]+[^\s<.,;:!?)"'])/g;
-
-const MEDIA_PATH = /^\/api\/media\/[A-Za-z0-9_-]{1,64}$/;
-// A link on a line of its own (bare, or as [text](link)) may become an embedded player.
-const STANDALONE_LINK = /^\s*(?:\[[^\]\n]*\]\((https?:\/\/[^)\s]+)\)|(https?:\/\/\S+))\s*$/;
-const STANDALONE_IMAGE = /^\s*!\[([^\]\n]*)\]\(([^)\s]+)\)\s*$/;
-
-function safeHref(href: string): string | null {
-  try {
-    const url = new URL(href);
-    return ["http:", "https:", "mailto:"].includes(url.protocol) ? url.toString() : null;
-  } catch {
-    return null;
-  }
-}
 
 const defaultImage = (src: string): string | null => (MEDIA_PATH.test(src) ? src : null);
 
@@ -86,13 +70,6 @@ function renderLines(ctx: MarkdownContext, lines: string[], keyPrefix: string): 
     ...renderInline(ctx, line, `${keyPrefix}l${i}`),
   ]);
 }
-
-const HEADING = /^(#{1,3})\s+(.+)$/;
-const BULLET = /^\s*[-*+]\s+(.*)$/;
-const ORDERED = /^\s*\d+[.)]\s+(.*)$/;
-const QUOTE = /^>\s?(.*)$/;
-const RULE = /^\s*([-*_])(\s*\1){2,}\s*$/;
-const FENCE = /^```/;
 
 // Headings start one level down: the page already has its own <h1>.
 const HEADING_TAGS = ["h2", "h3", "h4"] as const;

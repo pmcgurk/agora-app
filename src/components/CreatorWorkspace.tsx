@@ -29,6 +29,7 @@ export default async function CreatorWorkspace({ userId, children }: { userId: s
         { href: "/settings/appearance", label: "Appearance" },
         { href: "/settings/monetization", label: "Payments" },
         { href: "/settings/notifications", label: "Notifications" },
+        { href: "/settings/post-emails", label: "Post emails" },
         { href: "/settings/privacy", label: "Privacy" },
         { href: "/settings/account", label: "Account" },
       ],

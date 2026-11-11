@@ -3,16 +3,18 @@
 import { useActionState } from "react";
 import { type ApiKeyState, generateApiKey } from "@/app/actions/developer";
 import { buttonClass, inputClass } from "@/components/ui";
+import { submitKeepingFields } from "@/lib/form-submit";
 
 // The key is shown once, here, and never stored in plain text.
 export default function ApiKeyForm() {
   const [state, action, pending] = useActionState<ApiKeyState, FormData>(generateApiKey, {});
   return (
     <div className="space-y-3">
-      <form action={action} className="flex flex-wrap items-end gap-3">
+      <form onSubmit={submitKeepingFields(action)} className="flex flex-wrap items-end gap-3">
         <label>
           Key name
-          <input name="name" required maxLength={60} placeholder="e.g. Discord bot" className={inputClass} />
+          {/* Kept after an error; a new field once a key has been made, so the next one starts empty. */}
+          <input key={state.key ?? "new"} name="name" required maxLength={60} placeholder="e.g. Discord bot" className={inputClass} />
         </label>
         <button disabled={pending} className={buttonClass}>Generate key</button>
       </form>

@@ -4,6 +4,7 @@ import Avatar from "@/components/Avatar";
 import FontLink from "@/components/FontLink";
 import PoweredBy from "@/components/PoweredBy";
 import { SiteHeader } from "@/components/SiteHeader";
+import PaymentBanner from "@/components/PaymentBanner";
 import VerifyBanner from "@/components/VerifyBanner";
 import ThemeCss from "@/components/ThemeCss";
 import { tipsAvailable } from "@/components/TipJar";
@@ -57,6 +58,8 @@ export default async function CreatorShell({
       <ThemeCss settings={creator.themeSettings} />
       <SiteHeader />
       <VerifyBanner />
+
+      <PaymentBanner />
       {bannerUrl && (
         <div className="mx-auto max-w-4xl px-4 pt-4">
           {/* eslint-disable-next-line @next/next/no-img-element */}

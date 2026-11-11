@@ -1,9 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState, useCallback, useEffect, useRef, useState } from "react";
 import { createPost, updatePost, type PostFormState } from "@/app/actions/creator";
 import { buttonClass, inputClass } from "@/components/ui";
 import MarkdownEditor from "@/components/MarkdownEditor";
+import { submitKeepingFields } from "@/lib/form-submit";
 import { ACCEPT_ATTRIBUTE, describeUpload, formatBytes as formatSize, MAX_FILES_PER_POST, type MediaKindName } from "@/lib/media";
 
 type Tier = { id: string; name: string; price: number };
@@ -15,6 +17,8 @@ export type ExistingPost = {
   visibility: string;
   previewSeconds: number | null;
   allowBlurPreview: boolean;
+  // Whether followers who asked for emails get this post by email when it goes live.
+  sendEmail: boolean;
   clearThumbnail: boolean;
   // Where the post is in its life: not yet published, waiting for its time, or live.
   state: "draft" | "scheduled" | "published";
@@ -215,7 +219,7 @@ export default function PostComposer({ tiers, post }: { tiers: Tier[]; post?: Ex
     );
 
   return (
-    <form action={formAction} className="space-y-4">
+    <form onSubmit={submitKeepingFields(formAction)} className="space-y-4">
       {post && <input type="hidden" name="postId" value={post.id} />}
       <label className="block">
         Title
@@ -318,6 +322,25 @@ export default function PostComposer({ tiers, post }: { tiers: Tier[]; post?: Ex
             </option>
           ))}
         </select>
+      </label>
+
+      <label className="flex items-start gap-2">
+        <input type="checkbox" name="sendEmail" defaultChecked={post?.sendEmail ?? true} className="mt-1" />
+        <span>
+          Email this post to followers who asked for emails
+          <span className="block text-sm text-muted">
+            Sent once, when the post goes live.
+            {post && (
+              <>
+                {" "}
+                <Link href={`/settings/post-emails?kind=post&postId=${post.id}`} className="underline">
+                  See how the email looks
+                </Link>
+                .
+              </>
+            )}
+          </span>
+        </span>
       </label>
 
       {gated && hasImage && (

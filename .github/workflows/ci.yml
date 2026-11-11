@@ -27,7 +27,9 @@ jobs:
   # covering setup, posting, sign-up, password reset, email change, deleting an account, new-post emails and the
   # security headers. See e2e/README.md.
   e2e:
-    runs-on: ubuntu-latest
+    # A fixed image rather than ubuntu-latest, which GitHub is moving to a new Ubuntu release: a browser test run
+    # should not change underneath us.
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     services:
       postgres:
@@ -55,7 +57,16 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npx playwright install --with-deps chromium
+      # The browser itself comes from Playwright's own download, which does not depend on the system's package mirrors.
+      - run: npx playwright install chromium
+      # The system libraries it needs are normally on the runner already. Installing them goes through apt, which can
+      # stall for minutes when a mirror is slow (it did, taking this job from 20 seconds to 10 minutes and a failure),
+      # so it is a best-effort step with a time limit. If a library really is missing, the tests fail straight away and
+      # say which one.
+      - name: Install browser system libraries (best effort)
+        continue-on-error: true
+        timeout-minutes: 3
+        run: npx playwright install-deps chromium
       # Builds the site for the tests, resets the database, then runs the browser tests.
       - run: npm run test:e2e
       - uses: actions/upload-artifact@v7

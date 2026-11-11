@@ -1,12 +1,8 @@
 import { activeSubscriptionWhere, canView, getAccessContext } from "@/lib/access";
-import { postPath } from "@/lib/creator";
-import { newPostEmail } from "@/lib/email-templates";
-import { markdownExcerpt } from "@/lib/excerpt";
-import { siteName } from "@/lib/instance";
 import { getMailSettings, sendMail } from "@/lib/mail";
+import { composePostEmail } from "@/lib/newsletter";
 import { prisma } from "@/lib/prisma";
 import { isLive } from "@/lib/publishing";
-import { publicUrl } from "@/lib/urls";
 
 // Emailing new posts to members who asked for them. When a post goes live it is queued for each eligible member
 // (one row each, never twice); a timer sends the queue a few at a time, so a long list never holds anything up
@@ -21,9 +17,11 @@ export async function queuePostEmails(postId: string): Promise<number> {
   if (!(await getMailSettings())) return 0;
   const post = await prisma.post.findUnique({
     where: { id: postId },
-    select: { id: true, creatorId: true, isPublic: true, minTier: { select: { price: true } } },
+    select: { id: true, creatorId: true, isPublic: true, sendEmail: true, minTier: { select: { price: true } } },
   });
   if (!post) return 0;
+  // The creator switched emailing off for this post.
+  if (post.sendEmail === false) return 0;
   // A post that is neither public nor tied to a tier is for its creator alone.
   if (!post.isPublic && !post.minTier) return 0;
 
@@ -64,21 +62,29 @@ export async function sendQueuedPostEmails(limit = SEND_BATCH): Promise<{ sent: 
       user: { select: { id: true, name: true, email: true, emailPosts: true, emailVerifiedAt: true, unsubscribeToken: true } },
       post: {
         select: {
-          id: true, slug: true, title: true, textContent: true, publishedAt: true, isPublic: true,
+          id: true, slug: true, title: true, textContent: true, publishedAt: true, isPublic: true, sendEmail: true,
           minTier: { select: { price: true } },
-          creator: { select: { id: true, name: true, slug: true } },
+          creator: {
+            select: {
+              id: true, name: true, slug: true, themeName: true, themeSettings: true, fontBody: true, fontHeading: true,
+              avatarKey: true, newsletterFormat: true, emailFromName: true, emailReplyTo: true,
+            },
+          },
         },
       },
     },
   });
   if (queued.length === 0) return result;
-  const site = await siteName();
 
   for (const row of queued) {
     // Skip (and close out) anything that is no longer wanted: they unsubscribed, the post went back to a draft,
     // or they can no longer read it (membership ended, blocked, or the post moved to a higher tier).
     const wanted =
-      row.user.emailPosts && row.user.emailVerifiedAt && isLive(row.post.publishedAt) && (await stillAllowed(row.user.id, row.post));
+      row.user.emailPosts &&
+      row.user.emailVerifiedAt &&
+      row.post.sendEmail !== false &&
+      isLive(row.post.publishedAt) &&
+      (await stillAllowed(row.user.id, row.post));
     if (!wanted) {
       await prisma.postEmail.updateMany({ where: { id: row.id, sentAt: null }, data: { sentAt: new Date(), lastError: "skipped" } });
       result.skipped++;
@@ -92,16 +98,7 @@ export async function sendQueuedPostEmails(limit = SEND_BATCH): Promise<{ sent: 
       data: { attempts: { increment: 1 } },
     });
     if (claimed.count !== 1) continue;
-    const message = newPostEmail({
-      to: row.user.email,
-      siteName: site,
-      creatorName: row.post.creator.name,
-      title: row.post.title,
-      excerpt: markdownExcerpt(row.post.textContent, 280),
-      postUrl: publicUrl(await postPath(row.post.creator, row.post)),
-      unsubscribeUrl: publicUrl(`/unsubscribe/${row.user.unsubscribeToken}`),
-      oneClickUnsubscribeUrl: publicUrl(`/api/unsubscribe/${row.user.unsubscribeToken}`),
-    });
+    const message = await composePostEmail(row.post, row.user);
     const sent = await sendMail(message);
     if (sent.ok) {
       await prisma.postEmail.update({ where: { id: row.id }, data: { sentAt: new Date(), lastError: null } });
