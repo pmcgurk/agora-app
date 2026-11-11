@@ -98,6 +98,17 @@ has its own blueprint, [`render.demo.yaml`](render.demo.yaml).
 4. For local testing use the Stripe CLI: `stripe listen --forward-to localhost:3000/api/stripe/webhook`.
 5. Enable the customer portal in Stripe settings so patrons can update cards and see invoices.
 
+**When a card fails.** A failed renewal does not cut a patron off at once. They keep access for 7 days while Stripe
+retries the card, get one email with a link to update it (and a banner on their Subscriptions page), and you see a
+"payment failing" badge next to them on the Members page. If the payment goes through, the badge and banner clear. If
+Stripe gives up first, or the 7 days pass, access ends and they are told. For these emails, set up outgoing mail
+(Settings → Email); the rest works without it. You can set how long Stripe retries, and what happens afterwards, in
+Stripe → Settings → Billing → Subscriptions and emails.
+
+**Receipts and refunds.** Each payment (the first one, every renewal, and tips, including tips from guests) sends a
+receipt with the amount, the date and a link to Stripe's hosted invoice. A full refund sends a confirmation. Both need
+outgoing mail, and are sent once even if Stripe delivers the event twice. Taxes and VAT detail live on Stripe's invoice.
+
 Agora creates a Stripe Product/Price for each paid tier on first use (and a new
 Price when you change the amount or currency), sends patrons to Stripe Checkout,
 and keeps plans in sync from webhooks. Ending a paid plan keeps access until the end of
@@ -357,7 +368,7 @@ promised; items move up when someone needs them. Contributions welcome (see
 - [ ] Repeatable end-to-end tests of Stripe flows (subscribe, tip, end plan, refund, webhook retries) in CI.
 - [x] Automated tests for the webhook handler (signature failure, duplicate events, handler failure
       releasing the event claim) and for the access rules (`canView`, tier price comparisons).
-- [ ] Handle `invoice.payment_failed` grace periods and tell patrons when a card is failing.
+- [x] A 7-day grace period when a renewal fails, with an email, a banner and a Members badge (`invoice.payment_failed`).
 - [ ] Tax and VAT options beyond the default product tax code (see Managed Payments above), a setting for the tax code, and per-creator payout reporting (CSV export of payments and refunds).
 
 ### Email
@@ -370,7 +381,7 @@ promised; items move up when someone needs them. Contributions welcome (see
 - [ ] Emails for other events (new comments and replies, new members), with the same opt-in and unsubscribe.
 - [ ] A digest option (one email a day or week instead of one per post).
 - [ ] Bounce and complaint handling, and a log of what was sent and failed (the queue records failures; nothing shows them).
-- [ ] Receipts and refund confirmations for patrons.
+- [x] Receipts and refund confirmations for patrons.
 
 ### Analytics
 

@@ -158,6 +158,8 @@ model Subscription {
   stripeSubscriptionId String?            @unique
   // The plan stays active until expiresAt and is not renewed.
   cancelAtPeriodEnd    Boolean            @default(false)
+  // Set when a renewal payment fails, cleared when it succeeds. While set, access runs on a short grace period.
+  paymentFailedAt      DateTime?
   patron               User               @relation("PatronSubscriptions", fields: [patronId], references: [id], onDelete: Cascade)
   tier                 Tier               @relation(fields: [tierId], references: [id], onDelete: Cascade)
 

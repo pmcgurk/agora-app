@@ -217,6 +217,76 @@ ${footer}`,
   };
 }
 
+// Sent once, when a renewal payment fails. Access carries on for a few days while the card is fixed or retried.
+export function paymentFailedEmail(input: { to: string; siteName: string; name: string; creatorName: string; tierName: string; graceDays: number; url: string }): MailMessage {
+  const paragraphs = [
+    `Hi ${input.name}, we couldn’t take the payment for your ${input.tierName} membership of ${input.creatorName}.`,
+    `Your access carries on for ${input.graceDays} days while the payment is retried. To keep your membership, update your card now.`,
+  ];
+  const action = { label: "Update my card", url: input.url };
+  return {
+    to: input.to,
+    subject: `Your ${input.siteName} payment didn’t go through`,
+    text: text(paragraphs, action),
+    html: layout(input.siteName, "Your payment didn’t go through", paragraphs, action),
+  };
+}
+
+// Sent when the retries run out and the membership ends because of the failed payment.
+export function membershipEndedEmail(input: { to: string; siteName: string; name: string; creatorName: string; tierName: string; url: string }): MailMessage {
+  const paragraphs = [
+    `Hi ${input.name}, your ${input.tierName} membership of ${input.creatorName} has ended because the payment could not be taken.`,
+    "You can join again at any time.",
+  ];
+  const action = { label: `Visit ${input.creatorName}`, url: input.url };
+  return {
+    to: input.to,
+    subject: `Your ${input.creatorName} membership has ended`,
+    text: text(paragraphs, action),
+    html: layout(input.siteName, "Your membership has ended", paragraphs, action),
+  };
+}
+
+// A receipt for a payment: a renewal, a first payment or a tip. The hosted invoice has the tax detail.
+export function receiptEmail(input: {
+  to: string;
+  siteName: string;
+  name: string;
+  creatorName: string;
+  description: string;
+  amount: string;
+  date: string;
+  receiptUrl: string | null;
+}): MailMessage {
+  const paragraphs = [
+    `Hi ${input.name}, thank you. Here is your receipt.`,
+    `${input.description} (${input.creatorName})`,
+    `Amount: ${input.amount}`,
+    `Date: ${input.date}`,
+  ];
+  const action = input.receiptUrl ? { label: "View receipt", url: input.receiptUrl } : undefined;
+  return {
+    to: input.to,
+    subject: `Your ${input.siteName} receipt: ${input.amount}`,
+    text: text(paragraphs, action),
+    html: layout(input.siteName, "Your receipt", paragraphs, action),
+  };
+}
+
+// Sent when a payment is refunded in full. The money usually reaches the card within a week or so.
+export function refundEmail(input: { to: string; siteName: string; name: string; creatorName: string; description: string; amount: string }): MailMessage {
+  const paragraphs = [
+    `Hi ${input.name}, ${input.amount} has been refunded to you for: ${input.description} (${input.creatorName}).`,
+    "It can take 5 to 10 days to show on your statement, depending on your bank.",
+  ];
+  return {
+    to: input.to,
+    subject: `Your ${input.siteName} refund: ${input.amount}`,
+    text: text(paragraphs),
+    html: layout(input.siteName, "Your refund", paragraphs),
+  };
+}
+
 export function testEmail(input: { to: string; siteName: string }): MailMessage {
   const paragraphs = [`This is a test email from ${input.siteName}. If you can read it, outgoing mail works.`];
   return {
