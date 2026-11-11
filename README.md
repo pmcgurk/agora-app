@@ -425,7 +425,6 @@ promised; items move up when someone needs them. Contributions welcome (see
 - [x] Stripe and SMTP credentials are stored encrypted with a key from `APP_SECRET`.
 - [x] Sign-up no longer reveals whether an email is registered (on sites that can send email).
 - [ ] Key rotation for `APP_SECRET`, and encrypting the per-webhook signing secrets too.
-- [ ] Clear the moderate advisories in the lint tooling once the ESLint ecosystem has fixes.
 
 ### Engineering
 

@@ -82,5 +82,3 @@ These are understood and not yet fixed. Plan around them.
 - **The owner's SMTP host is not restricted**, so the owner (who already controls the server's settings) can make it
   connect to any address.
 - **Styles allow inline rules** (`style-src 'unsafe-inline'`), which theming and Next.js rely on.
-- **Development tooling** (ESLint and TypeScript-ESLint) has open moderate advisories. They affect developers' machines
-  and CI, not the running site.

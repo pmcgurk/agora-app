@@ -26,6 +26,8 @@ export const MAX_FILE_NAME_LENGTH = 200;
 // Strips path pieces and control characters; the name is only ever used as a download label.
 export function cleanFileName(value: unknown): string | null {
   if (typeof value !== "string") return null;
+  // Control characters are stripped on purpose.
+  // oxlint-disable-next-line no-control-regex
   const name = value.replace(/[\\/]+/g, "_").replace(/[\u0000-\u001f\u007f"]/g, "").trim();
   return name ? name.slice(0, MAX_FILE_NAME_LENGTH) : null;
 }

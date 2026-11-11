@@ -56,6 +56,8 @@ export default async function AccountSettings({
           Everything held about this account (your details, memberships, payments, comments, likes and messages) as one file.
           Passwords and other people&apos;s email addresses are not in it.
         </p>
+        {/* A file download, not a page, so a plain link: next/link would try to open it as one. */}
+        {/* oxlint-disable-next-line next/no-html-link-for-pages */}
         <a href="/api/account/export" className={secondaryButtonClass}>Download my data</a>
       </div>
 

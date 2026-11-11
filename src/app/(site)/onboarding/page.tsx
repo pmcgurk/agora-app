@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { finishOnboarding, saveOnboardingProfile, saveOnboardingStripe, skipOnboarding } from "@/app/actions/onboarding";
 import Flash from "@/components/Flash";
@@ -130,7 +131,7 @@ async function PaymentsStep({ currency, demo }: { currency: string; demo: boolea
           </p>
         )}
         <div className="flex gap-3">
-          <a href="/onboarding" className={secondaryButtonClass}>Back</a>
+          <Link href="/onboarding" className={secondaryButtonClass}>Back</Link>
           <button className={buttonClass}>Finish setup</button>
         </div>
       </form>
