@@ -10,7 +10,7 @@ const { prisma, getMailSettings, sendMail } = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/prisma", () => ({ prisma }));
 vi.mock("@/lib/mail", () => ({ getMailSettings, sendMail }));
-vi.mock("@/lib/instance", () => ({ siteName: async () => "Test Site" }));
+vi.mock("@/lib/email-brand", () => ({ emailBrand: async () => ({ siteName: "Test Site" }) }));
 
 import { sendMembershipEndedNotice, sendPaymentFailedNotice, sendReceipt, sendRefundNotices } from "@/lib/payment-emails";
 

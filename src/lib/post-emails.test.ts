@@ -13,7 +13,7 @@ const { prisma, getMailSettings, sendMail } = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/prisma", () => ({ prisma }));
 vi.mock("@/lib/mail", () => ({ getMailSettings, sendMail }));
-vi.mock("@/lib/instance", () => ({ siteName: async () => "Test Site", getSiteCreator: async () => ({ id: "c1" }) }));
+vi.mock("@/lib/instance", () => ({ siteName: async () => "Test Site", getSiteCreator: async () => ({ id: "c1" }), isPrivateInstance: async () => false }));
 
 import { findUnsubscribeTarget, queuePostEmails, sendQueuedPostEmails, unsubscribeByToken } from "@/lib/post-emails";
 
@@ -63,6 +63,12 @@ describe("queueing new-post emails", () => {
 
   it("emails nobody about a post that is for its creator alone", async () => {
     prisma.post.findUnique.mockResolvedValue(post({ isPublic: false, minTier: null }));
+    expect(await queuePostEmails("p1")).toBe(0);
+    expect(prisma.subscription.findMany).not.toHaveBeenCalled();
+  });
+
+  it("queues nobody when the creator switched emailing off for the post", async () => {
+    prisma.post.findUnique.mockResolvedValue(post({ sendEmail: false }));
     expect(await queuePostEmails("p1")).toBe(0);
     expect(prisma.subscription.findMany).not.toHaveBeenCalled();
   });
@@ -127,6 +133,12 @@ describe("sending the queue", () => {
     expect(await sendQueuedPostEmails()).toEqual({ sent: 0, failed: 0, skipped: 2 });
     expect(sendMail).not.toHaveBeenCalled();
     expect(prisma.postEmail.updateMany).toHaveBeenCalledTimes(2);
+  });
+
+  it("skips a post whose emailing was switched off after it was queued", async () => {
+    prisma.postEmail.findMany.mockResolvedValue([row({ post: { ...row().post, sendEmail: false } })]);
+    expect(await sendQueuedPostEmails()).toEqual({ sent: 0, failed: 0, skipped: 1 });
+    expect(sendMail).not.toHaveBeenCalled();
   });
 
   it("skips a post that went back to a draft after it was queued", async () => {

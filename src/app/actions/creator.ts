@@ -192,6 +192,8 @@ async function readPostForm(creatorId: string, formData: FormData) {
     items,
     schedule,
     allowBlurPreview: !isPublic && formData.get("allowBlurPreview") === "on",
+    // The composer always sends this checkbox, so a missing value means it was switched off.
+    sendEmail: formData.get("sendEmail") === "on",
     clearThumbnail: !isPublic && formData.get("clearThumbnail") === "on",
     previewSeconds:
       !isPublic && requestedSeconds >= 1 ? Math.min(requestedSeconds, MAX_PREVIEW_SECONDS) : null,
@@ -256,6 +258,7 @@ export async function createPost(_previous: PostFormState, formData: FormData): 
         isPublic: form.isPublic,
         minTierId: form.minTierId,
         allowBlurPreview: form.allowBlurPreview,
+        sendEmail: form.sendEmail,
         clearThumbnail: form.clearThumbnail,
         previewSeconds: form.previewSeconds,
         publishedAt: form.schedule.kind === "draft" ? null : form.schedule.kind === "at" ? form.schedule.at : new Date(),
@@ -363,6 +366,7 @@ export async function updatePost(_previous: PostFormState, formData: FormData): 
           isPublic: form.isPublic,
           minTierId: form.minTierId,
           allowBlurPreview: form.allowBlurPreview,
+          sendEmail: form.sendEmail,
           clearThumbnail: form.clearThumbnail,
           previewSeconds: form.previewSeconds,
           publishedAt,

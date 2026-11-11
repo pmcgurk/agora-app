@@ -8,7 +8,7 @@ const { getMailSettings, sendMail, createEmailToken } = vi.hoisted(() => ({
 
 vi.mock("@/lib/mail", () => ({ getMailSettings, sendMail }));
 vi.mock("@/lib/email-tokens", () => ({ createEmailToken, TOKEN_LIFETIME_MS: { PASSWORD_RESET: 3_600_000, VERIFY_EMAIL: 259_200_000 } }));
-vi.mock("@/lib/instance", () => ({ siteName: async () => "Test Site" }));
+vi.mock("@/lib/email-brand", () => ({ emailBrand: async () => ({ siteName: "Test Site" }) }));
 
 import { mailIsConfigured, needsVerification, sendPasswordResetEmail, sendVerificationEmail } from "@/lib/account-email";
 

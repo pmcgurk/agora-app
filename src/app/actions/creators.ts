@@ -6,7 +6,8 @@ import { createSession, requireUser } from "@/lib/auth";
 import { DEMO_OFF, isDemoMode } from "@/lib/demo";
 import { applicationApprovedEmail, applicationReceivedEmail, applicationRejectedEmail, invitationEmail } from "@/lib/email-templates";
 import { createCreatorInvite, findOpenInvite, INVITE_COOKIE } from "@/lib/invites";
-import { getCreatorSettings, getInstanceSettings, isInstanceOwner, setMultiCreator, siteName, type CreatorSignup } from "@/lib/instance";
+import { emailBrand } from "@/lib/email-brand";
+import { getCreatorSettings, getInstanceSettings, isInstanceOwner, setMultiCreator, type CreatorSignup } from "@/lib/instance";
 import { sendMail } from "@/lib/mail";
 import { hashPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
@@ -112,9 +113,9 @@ export async function inviteCreator(formData: FormData) {
   if (slugInput && (await pageNameTaken(slugInput))) fail(CREATORS, "That page name is already taken.");
 
   const token = await createCreatorInvite({ createdById: owner.id, email, name, slug: slugInput || null });
-  const site = await siteName();
+  const brand = await emailBrand();
   const sent = await sendMail(
-    invitationEmail({ to: email, siteName: site, inviteeName: name, inviterName: owner.name, url: publicUrl(`/invite/${token}`) }),
+    invitationEmail({ to: email, ...brand, inviteeName: name, inviterName: owner.name, url: publicUrl(`/invite/${token}`) }),
   );
   // The raw link is shown once, on the creators page, from a short-lived cookie.
   (await cookies()).set(INVITE_COOKIE, token, {
@@ -201,7 +202,7 @@ export async function applyForCreator(formData: FormData) {
     await sendMail(
       applicationReceivedEmail({
         to: owner.email,
-        siteName: await siteName(),
+        ...(await emailBrand()),
         applicantName: name,
         applicantEmail: email,
         url: publicUrl(CREATORS),
@@ -217,11 +218,11 @@ export async function decideApplication(formData: FormData) {
   const decision = text(formData, "decision");
   const application = await prisma.creatorApplication.findUnique({ where: { id } });
   if (!application || application.status !== "PENDING") fail(CREATORS, "That application has already been decided.");
-  const site = await siteName();
+  const brand = await emailBrand();
 
   if (decision === "reject") {
     await prisma.creatorApplication.update({ where: { id }, data: { status: "REJECTED", decidedAt: new Date() } });
-    await sendMail(applicationRejectedEmail({ to: application.email, siteName: site, name: application.name }));
+    await sendMail(applicationRejectedEmail({ to: application.email, ...brand, name: application.name }));
     done(CREATORS, `Application from ${application.name} rejected.`);
   }
 
@@ -247,7 +248,7 @@ export async function decideApplication(formData: FormData) {
     }),
     prisma.creatorApplication.update({ where: { id }, data: { status: "APPROVED", decidedAt: new Date() } }),
   ]);
-  await sendMail(applicationApprovedEmail({ to: application.email, siteName: site, name: application.name, url: publicUrl("/login") }));
+  await sendMail(applicationApprovedEmail({ to: application.email, ...brand, name: application.name, url: publicUrl("/login") }));
   done(CREATORS, `${application.name} is now a creator.`);
 }
 

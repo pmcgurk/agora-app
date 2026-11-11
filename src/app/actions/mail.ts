@@ -3,8 +3,9 @@
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { DEMO_OFF, isDemoMode } from "@/lib/demo";
-import { getSiteCreator, isInstanceOwner } from "@/lib/instance";
+import { isInstanceOwner } from "@/lib/instance";
 import { sendMail, verifyMailSettings, type MailSettings } from "@/lib/mail";
+import { emailBrand } from "@/lib/email-brand";
 import { testEmail } from "@/lib/email-templates";
 import { prisma } from "@/lib/prisma";
 import { decryptSecret, encryptSecret } from "@/lib/secrets";
@@ -87,8 +88,7 @@ export async function clearMailSettings() {
 
 export async function sendTestMail() {
   const owner = await requireOwner();
-  const site = (await getSiteCreator())?.name ?? "Agora";
-  const result = await sendMail(testEmail({ to: owner.email, siteName: site }));
+  const result = await sendMail(testEmail({ to: owner.email, ...(await emailBrand()) }));
   if (!result.ok) back(result.error, "error");
   back(`Test email sent to ${owner.email}.`);
 }

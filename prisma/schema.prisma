@@ -29,6 +29,12 @@ enum PaymentKind {
   TIP
 }
 
+// What a new-post email contains: a short excerpt with a button, or the whole post (a newsletter).
+enum NewsletterFormat {
+  EXCERPT
+  FULL
+}
+
 enum SubscriptionStatus {
   ACTIVE
   CANCELED
@@ -75,6 +81,11 @@ model User {
   notifyReplies    Boolean          @default(true)
   // Members can ask to be emailed when a creator they follow publishes. Off until they choose it.
   emailPosts       Boolean          @default(false)
+  // For creators: how their new-post emails look and who they appear to come from. The email they signed up with is
+  // never used for this; replies go only to the address they choose here, if any.
+  newsletterFormat NewsletterFormat @default(EXCERPT)
+  emailFromName    String?
+  emailReplyTo     String?
   // A secret in the unsubscribe link of those emails, so it works without logging in.
   unsubscribeToken String           @unique @default(dbgenerated("replace(((gen_random_uuid())::text || (gen_random_uuid())::text), '-'::text, ''::text)"))
   postEmails       PostEmail[]
@@ -185,6 +196,9 @@ model Post {
   publishedAt      DateTime?     @default(now())
   // When subscribers and webhooks were told about the post; null until then.
   announcedAt      DateTime?
+  // Whether followers who asked for emails get this post by email when it goes live. On by default; a creator can
+  // switch it off for a post that should only be on the site.
+  sendEmail        Boolean       @default(true)
   // The readable part of the post address, unique per creator. Posts opened by id still work.
   slug             String?
   comments         Comment[]

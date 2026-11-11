@@ -200,6 +200,23 @@ and a site that can send email, follows the same tier rules as the post itself, 
 (and the one-click header mail programs use). A timer inside the server sends 50 a minute, so a long list never holds
 anything up. The dashboard shows how many members get posts by email.
 
+#### Newsletters, and how emails look
+
+Every email the site sends (sign-up links, receipts, resets and the rest) is a small card in the colours and fonts of the
+creator's blog, with their picture and a plain-text twin. **Settings → Newsletter** is where a creator controls the posts they send:
+
+- **What goes in the email**: a short taste with a button, or the **whole post** as a newsletter. A post is read with the same
+  Markdown rules as the blog. Pictures of public posts are included; for members-only posts, and for video players, the email
+  links back to the site, because a mail program has no login.
+- **Send as**: the name members see in their inbox (their public name by default). The address it is sent from is always the
+  site's own, and **the email a creator signed up with is never shown or used**. An optional **reply-to** address is where
+  replies go; leave it empty and they go to the site's sending address.
+- **Per post**: a checkbox in the post editor ("Email this post to followers who asked for emails") switches emailing off for
+  one post. A post is emailed once, when it first goes live.
+- **Preview and test**: choose a post, or any of the site's other emails, and see it at desktop and phone width or as plain
+  text, then press **Send me this as a test** to get it in your own inbox, exactly as members would. Test sends are limited to
+  five every ten minutes.
+
 
 ## Recovering access
 
@@ -378,6 +395,9 @@ promised; items move up when someone needs them. Contributions welcome (see
 - [x] Email verification at sign-up and password reset links (time-limited, single use).
 - [x] Let members change their email address (with confirmation), delete their account, and download their data.
 - [x] Emails for new posts, with a per-member opt-in and one-click unsubscribe.
+- [x] Branded emails in the creator's theme, posts sent as a full newsletter, a "send as" name and reply-to for creators, and an
+      in-app preview with test sends.
+- [ ] Dark-mode tuning for email clients that invert colours, and web fonts for the clients that support them.
 - [ ] Emails for other events (new comments and replies, new members), with the same opt-in and unsubscribe.
 - [ ] A digest option (one email a day or week instead of one per post).
 - [ ] Bounce and complaint handling, and a log of what was sent and failed (the queue records failures; nothing shows them).

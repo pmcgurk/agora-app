@@ -1,7 +1,7 @@
 import { creatorPath } from "@/lib/creator";
 import { formatMoney } from "@/lib/currency";
 import { membershipEndedEmail, paymentFailedEmail, receiptEmail, refundEmail } from "@/lib/email-templates";
-import { siteName } from "@/lib/instance";
+import { emailBrand } from "@/lib/email-brand";
 import { getMailSettings, sendMail } from "@/lib/mail";
 import { prisma } from "@/lib/prisma";
 import { publicUrl } from "@/lib/urls";
@@ -38,7 +38,7 @@ export function sendPaymentFailedNotice(subscriptionId: string, graceDays: numbe
     await sendMail(
       paymentFailedEmail({
         to: plan.patron.email,
-        siteName: await siteName(),
+        ...(await emailBrand()),
         name: plan.patron.name,
         creatorName: plan.tier.creator.name,
         tierName: plan.tier.name,
@@ -57,7 +57,7 @@ export function sendMembershipEndedNotice(subscriptionId: string): Promise<void>
     await sendMail(
       membershipEndedEmail({
         to: plan.patron.email,
-        siteName: await siteName(),
+        ...(await emailBrand()),
         name: plan.patron.name,
         creatorName: plan.tier.creator.name,
         tierName: plan.tier.name,
@@ -85,7 +85,7 @@ export function sendReceipt(input: ReceiptInput): Promise<void> {
     await sendMail(
       receiptEmail({
         to: input.to,
-        siteName: await siteName(),
+        ...(await emailBrand()),
         name: input.name ?? "there",
         creatorName: input.creatorName,
         description: input.description,
@@ -111,13 +111,13 @@ export function sendRefundNotices(paymentIds: string[]): Promise<void> {
         creator: { select: { name: true } },
       },
     });
-    const site = await siteName();
+    const brand = await emailBrand();
     for (const payment of payments) {
       if (!payment.patron) continue;
       await sendMail(
         refundEmail({
           to: payment.patron.email,
-          siteName: site,
+          ...brand,
           name: payment.patron.name,
           creatorName: payment.creator.name,
           description: payment.kind === "TIP" ? "Tip" : `${payment.tier?.name ?? "Membership"} membership`,

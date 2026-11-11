@@ -30,6 +30,7 @@ export default async function EditPostPage({ params }: { params: Promise<{ id: s
           visibility: post.isPublic ? "public" : (post.minTierId ?? "public"),
           previewSeconds: post.previewSeconds,
           allowBlurPreview: post.allowBlurPreview,
+          sendEmail: post.sendEmail,
           clearThumbnail: post.clearThumbnail,
           state: postState(post),
           publishedAt: post.publishedAt?.toISOString() ?? null,

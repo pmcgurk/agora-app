@@ -10,7 +10,7 @@ import {
   verifyEmailEmail,
 } from "@/lib/email-templates";
 import { createPendingSignup, SIGNUP_LINK_LIFETIME_MS } from "@/lib/pending-signups";
-import { siteName } from "@/lib/instance";
+import { emailBrand } from "@/lib/email-brand";
 import { getMailSettings, sendMail } from "@/lib/mail";
 import { publicUrl } from "@/lib/urls";
 
@@ -32,7 +32,7 @@ export async function sendPasswordResetEmail(user: Recipient): Promise<void> {
   await sendMail(
     passwordResetEmail({
       to: user.email,
-      siteName: await siteName(),
+      ...(await emailBrand()),
       name: user.name,
       url: publicUrl(`/reset-password/${token}`),
       minutes: TOKEN_LIFETIME_MS.PASSWORD_RESET / 60_000,
@@ -45,7 +45,7 @@ export async function sendVerificationEmail(user: Recipient): Promise<void> {
   await sendMail(
     verifyEmailEmail({
       to: user.email,
-      siteName: await siteName(),
+      ...(await emailBrand()),
       name: user.name,
       url: publicUrl(`/verify-email/${token}`),
       days: TOKEN_LIFETIME_MS.VERIFY_EMAIL / (24 * 60 * 60 * 1000),
@@ -59,7 +59,7 @@ export async function sendFinishSignupEmail(email: string, name: string, emailPo
   await sendMail(
     finishSignupEmail({
       to: email,
-      siteName: await siteName(),
+      ...(await emailBrand()),
       name,
       url: publicUrl(`/signup/finish/${token}`),
       hours: SIGNUP_LINK_LIFETIME_MS / (60 * 60 * 1000),
@@ -70,7 +70,7 @@ export async function sendFinishSignupEmail(email: string, name: string, emailPo
 // Sent instead, when the address already has an account, so the answer on screen can be the same either way.
 export async function sendAlreadyRegisteredEmail(user: Recipient): Promise<void> {
   await sendMail(
-    alreadyRegisteredEmail({ to: user.email, siteName: await siteName(), name: user.name, loginUrl: publicUrl("/login"), resetUrl: publicUrl("/forgot-password") }),
+    alreadyRegisteredEmail({ to: user.email, ...(await emailBrand()), name: user.name, loginUrl: publicUrl("/login"), resetUrl: publicUrl("/forgot-password") }),
   );
 }
 
@@ -82,7 +82,7 @@ export async function sendEmailChangeLink(user: EmailChangeRecipient, newEmail: 
   await sendMail(
     confirmEmailChangeEmail({
       to: newEmail,
-      siteName: await siteName(),
+      ...(await emailBrand()),
       name: user.name,
       url: publicUrl(`/confirm-email-change/${token}`),
       hours: TOKEN_LIFETIME_MS.EMAIL_CHANGE / (60 * 60 * 1000),
@@ -91,14 +91,14 @@ export async function sendEmailChangeLink(user: EmailChangeRecipient, newEmail: 
 }
 
 export async function sendEmailInUseNotice(address: string): Promise<void> {
-  await sendMail(emailInUseNoticeEmail({ to: address, siteName: await siteName(), loginUrl: publicUrl("/login") }));
+  await sendMail(emailInUseNoticeEmail({ to: address, ...(await emailBrand()), loginUrl: publicUrl("/login") }));
 }
 
 // Told to the OLD address after a change, so a hijacked account cannot quietly move its email.
 export async function sendEmailChangedNotice(oldEmail: string, user: { name: string }, newEmail: string): Promise<void> {
-  await sendMail(emailChangedNoticeEmail({ to: oldEmail, siteName: await siteName(), name: user.name, newEmail, resetUrl: publicUrl("/forgot-password") }));
+  await sendMail(emailChangedNoticeEmail({ to: oldEmail, ...(await emailBrand()), name: user.name, newEmail, resetUrl: publicUrl("/forgot-password") }));
 }
 
 export async function sendAccountDeletedNotice(user: { name: string; email: string }): Promise<void> {
-  await sendMail(accountDeletedEmail({ to: user.email, siteName: await siteName(), name: user.name }));
+  await sendMail(accountDeletedEmail({ to: user.email, ...(await emailBrand()), name: user.name }));
 }
