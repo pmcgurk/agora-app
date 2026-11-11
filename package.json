@@ -1,6 +1,6 @@
 {
   "name": "agora",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": true,
   "description": "Self-hosted, open-source alternative to Patreon and Ko-fi",
   "license": "MIT",
