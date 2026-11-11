@@ -35,6 +35,7 @@ All settings are environment variables. Required ones are marked.
 | `MINIO_PUBLIC_ENDPOINT` | How browsers reach storage (signed links are made for this address). Same as above if storage is hosted; a public name if it is MinIO on your own server. Defaults to `MINIO_ENDPOINT`. |
 | `MINIO_BUCKET`, `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD` **required** | The bucket and its access key and secret. The names say MinIO, but they mean "bucket, access key, secret" for any S3-compatible service. |
 | `MINIO_REGION` | `us-east-1` by default; `auto` for R2. |
+| `APP_SECRET` **set it on any real site** | Encrypts the Stripe keys and SMTP password you save in Settings before they reach the database. A long random value (`openssl rand -hex 32`). Keep it with your other secrets: if it is lost or changed, saved keys cannot be read and must be entered again, and a restored backup needs the same value. Without it they are stored in plain text. |
 | `SETUP_TOKEN` **set it on any public server** | Setup (`/setup`) also asks for this. Without it, whoever opens the page first becomes the owner. Generate one with `openssl rand -hex 24`. |
 | `ALLOW_FREE_SUBSCRIPTIONS` | `true` makes paid tiers "buy" for free (a test checkout). Keep it `false` on a real site without Stripe. |
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Optional; or enter them in Settings → Payments. See [Payments with Stripe](../README.md#payments-with-stripe). |
@@ -87,7 +88,8 @@ Check the platform does not run more than one instance and does not put the cont
 
 Possible, but you lose the start-up checks, so it is not recommended. Install Node 22 and `ffmpeg`, then
 `npm ci`, `npm run build`, `npx prisma migrate deploy` and `npx next start`, with the same environment variables. Create
-the bucket yourself first.
+the bucket yourself first. **Set `NEXT_PUBLIC_BASE_URL` when you run `npm run build` too**: Next.js bakes it into the build, so a
+build made next to a `.env` with another address would put that address in your emails and links.
 
 ## Email and password resets
 
@@ -100,8 +102,16 @@ docker compose exec app npx tsx prisma/reset-link.ts you@example.com     # Compo
 npm run reset-link -- you@example.com                                     # a plain checkout
 ```
 
-With email set up, new members confirm their address before they can comment or message, and "forgot password" sends a
-single-use link that expires after an hour.
+With email set up:
+
+- signing up sends a link and the account is made when its owner opens it and chooses a password (so the form never reveals
+  who is registered);
+- "forgot password" sends a single-use link that expires after an hour;
+- members can change their email address (confirmed at the new one) and ask for new posts by email, with a one-click
+  unsubscribe in every message. A timer inside the server sends 50 a minute.
+
+Use a mail provider that allows this kind of mail from your sending domain, set up SPF and DKIM for it, and keep an eye on
+its logs: the site records failures but does not yet show them.
 
 ## Checklist before you announce it
 
@@ -110,7 +120,9 @@ single-use link that expires after an hour.
 - [ ] `https://<site>/api/health` returns `{"status":"ok"}`.
 - [ ] You posted a picture and it loads (this proves the storage address, CORS and signed links).
 - [ ] [Backups](backups.md) run on a schedule, a copy is kept somewhere else, and you ran the restore drill once.
-- [ ] Email is configured if you want password resets and confirmations.
+- [ ] Email is configured if you want password resets, sign-up links and new-post emails.
+- [ ] `APP_SECRET` is set, so saved Stripe and SMTP keys are encrypted.
+- [ ] The footer shows the version you expect (it is also in `/api/health`).
 - [ ] Stripe is in live mode with a webhook pointing at `/api/stripe/webhook`, if you take payments; otherwise
       `ALLOW_FREE_SUBSCRIPTIONS` is `false`.
 - [ ] `https://<site>/feed.xml` and `/sitemap.xml` load, and a shared post link shows a preview.

@@ -75,6 +75,8 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
       # Whoever opens /setup first owns the site, so setup asks for this. Required here on purpose.
       SETUP_TOKEN: ${SETUP_TOKEN:?Set SETUP_TOKEN in .env (openssl rand -hex 24)}
+      # Encrypts the Stripe keys and SMTP password saved in Settings. Keep it safe: if it is lost, saved keys must be re-entered.
+      APP_SECRET: ${APP_SECRET:?Set APP_SECRET in .env (openssl rand -hex 32)}
       MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-1024}
       # Without Stripe keys this must stay false, or anyone could "buy" a paid tier for free.
       ALLOW_FREE_SUBSCRIPTIONS: ${ALLOW_FREE_SUBSCRIPTIONS:-false}

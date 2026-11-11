@@ -126,6 +126,8 @@ export function parseThemeFile(parsed: unknown): ParsedTheme {
   }
   if (Object.keys(settings).length === 0) return { error: "The theme file has nothing to apply." };
 
+  // Control characters are stripped on purpose.
+  // oxlint-disable-next-line no-control-regex
   const name = typeof root.name === "string" ? root.name.replace(/[\u0000-\u001f]/g, "").trim().slice(0, 40) : "";
   if (name) settings.name = name;
   return { settings };

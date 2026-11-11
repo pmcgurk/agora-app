@@ -8,4 +8,9 @@ export async function register() {
   }
   const { startPublisher } = await import("@/lib/publisher");
   startPublisher();
+  // Credentials saved before APP_SECRET was set are encrypted now.
+  const { encryptStoredSecrets } = await import("@/lib/secrets");
+  encryptStoredSecrets()
+    .then((count) => count > 0 && console.log(`Encrypted ${count} saved credential${count === 1 ? "" : "s"}.`))
+    .catch((error) => console.error("Encrypting saved credentials failed:", error instanceof Error ? error.message : error));
 }

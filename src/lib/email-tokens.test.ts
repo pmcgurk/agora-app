@@ -50,11 +50,11 @@ describe("creating links", () => {
 });
 
 describe("looking at a link", () => {
-  const row = (overrides = {}) => ({ userId: "user-1", kind: "PASSWORD_RESET", usedAt: null, expiresAt: new Date(Date.now() + 60_000), ...overrides });
+  const row = (overrides = {}) => ({ userId: "user-1", kind: "PASSWORD_RESET", usedAt: null, payload: null, expiresAt: new Date(Date.now() + 60_000), ...overrides });
 
   it("accepts a live link of the right kind", async () => {
     prisma.emailToken.findUnique.mockResolvedValue(row());
-    expect(await findEmailToken(GOOD, "PASSWORD_RESET")).toEqual({ userId: "user-1" });
+    expect(await findEmailToken(GOOD, "PASSWORD_RESET")).toEqual({ userId: "user-1", payload: null });
     expect(prisma.emailToken.findUnique).toHaveBeenCalledWith({ where: { tokenHash: sha256(GOOD) } });
   });
 

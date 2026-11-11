@@ -40,3 +40,7 @@ pnpm-debug.log*
 *.Identifier
 # Backups hold everything in the site, including password hashes and saved keys. Never commit them.
 /backups/
+
+# Browser test output
+/playwright-report/
+/test-results/

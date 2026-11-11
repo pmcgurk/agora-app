@@ -1,5 +1,6 @@
 import nodemailer from "nodemailer";
 import { prisma } from "@/lib/prisma";
+import { decryptSecret } from "@/lib/secrets";
 
 // Outgoing email. The owner enters an SMTP server in Settings > Email; the MAIL_* environment
 // variables are the fallback for hosts that prefer configuration as code. Without either, mail
@@ -14,7 +15,8 @@ export type MailSettings = {
   from: string;
 };
 
-export type MailMessage = { to: string; subject: string; text: string; html: string };
+// headers: extra mail headers, such as List-Unsubscribe on bulk mail.
+export type MailMessage = { to: string; subject: string; text: string; html: string; headers?: Record<string, string> };
 
 export type MailResult = { ok: true } | { ok: false; error: string };
 
@@ -41,7 +43,7 @@ export async function getMailSettings(): Promise<MailSettings | null> {
       port: row.smtpPort ?? (row.smtpSecure ? 465 : 587),
       secure: row.smtpSecure,
       user: row.smtpUser,
-      password: row.smtpPassword,
+      password: decryptSecret(row.smtpPassword, "smtpPassword"),
       from: row.mailFrom,
     };
   }

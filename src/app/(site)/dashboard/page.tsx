@@ -4,6 +4,9 @@ import { linkClass } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
 import { creatorPath } from "@/lib/creator";
 import { formatMoney } from "@/lib/currency";
+import { mailIsConfigured } from "@/lib/account-email";
+import { activeSubscriptionWhere } from "@/lib/access";
+import { prisma } from "@/lib/prisma";
 import { countUnpublished } from "@/lib/publishing";
 import { formatBytes, getCreatorStats } from "@/lib/stats";
 import { PatronOverview } from "./patron-overview";
@@ -19,13 +22,21 @@ export default async function DashboardPage({
   const { error, notice } = await searchParams;
   if (user.role !== "CREATOR") return <PatronOverview user={user} error={error} notice={notice} />;
 
-  const [stats, unpublished] = await Promise.all([getCreatorStats(user.id), countUnpublished(user.id)]);
+  const [stats, unpublished, emailing] = await Promise.all([
+    getCreatorStats(user.id),
+    countUnpublished(user.id),
+    // How many members get new posts by email (only meaningful when the site can send it).
+    mailIsConfigured().then((can) =>
+      can ? prisma.user.count({ where: { emailPosts: true, emailVerifiedAt: { not: null }, subscriptions: { some: { ...activeSubscriptionWhere(), tier: { creatorId: user.id } } } } }) : null,
+    ),
+  ]);
   const cards: [string, string | number][] = [
     ["Members", stats.followers],
     ["Paying", stats.paidSubscribers],
     ["Gifted", stats.giftedSubscribers],
     ["Monthly revenue", formatMoney(stats.monthlyRevenueCents, user.currency)],
     ["Posts", stats.postCount],
+    ...(emailing === null ? [] : ([["Get posts by email", emailing]] as [string, number][])),
     ["Storage", `${stats.mediaCount} ${stats.mediaCount === 1 ? "file" : "files"} · ${formatBytes(stats.storageBytes)}`],
   ];
 

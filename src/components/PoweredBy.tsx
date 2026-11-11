@@ -1,4 +1,5 @@
 import Logo from "@/components/Logo";
+import { versionLabel } from "@/lib/version";
 
 export default function PoweredBy() {
   return (
@@ -7,6 +8,8 @@ export default function PoweredBy() {
       <a href="https://github.com/pmcgurk/agora-app" rel="noopener noreferrer">
         <Logo className="text-lg" />
       </a>
+      {/* For debugging: which build is this site running? */}
+      <span className="agora-version text-xs opacity-70" title="Agora version">{versionLabel()}</span>
     </footer>
   );
 }

@@ -7,6 +7,7 @@ import { getSiteCreator, isInstanceOwner } from "@/lib/instance";
 import { sendMail, verifyMailSettings, type MailSettings } from "@/lib/mail";
 import { testEmail } from "@/lib/email-templates";
 import { prisma } from "@/lib/prisma";
+import { decryptSecret, encryptSecret } from "@/lib/secrets";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const HOST_PATTERN = /^[A-Za-z0-9.-]{1,255}$/;
@@ -48,7 +49,7 @@ async function settingsFromForm(formData: FormData): Promise<MailSettings | stri
     port,
     secure: formData.get("smtpSecure") === "on",
     user: text(formData, "smtpUser") || null,
-    password: typedPassword || existing?.smtpPassword || null,
+    password: typedPassword || decryptSecret(existing?.smtpPassword, "smtpPassword") || null,
     from,
   };
 }
@@ -67,7 +68,7 @@ export async function saveMailSettings(_previous: MailFormState, formData: FormD
     smtpPort: settings.port,
     smtpSecure: settings.secure,
     smtpUser: settings.user,
-    smtpPassword: settings.password,
+    smtpPassword: settings.password ? encryptSecret(settings.password, "smtpPassword") : null,
     mailFrom: settings.from,
   };
   await prisma.instanceSetting.upsert({ where: { id: "instance" }, update: data, create: { id: "instance", ...data } });

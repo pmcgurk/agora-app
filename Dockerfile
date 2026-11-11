@@ -6,6 +6,9 @@ RUN apk add --no-cache openssl ffmpeg ttf-dejavu
 
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
+# Optional: docker build --build-arg GIT_SHA=$(git rev-parse HEAD) shows the commit next to the version.
+ARG GIT_SHA=
+ENV GIT_SHA=${GIT_SHA}
 
 COPY package.json package-lock.json ./
 RUN npm ci

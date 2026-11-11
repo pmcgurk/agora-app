@@ -8,6 +8,7 @@ import { isDemoMode } from "@/lib/demo";
 import { markdownExcerpt } from "@/lib/excerpt";
 import { creatorIcons } from "@/lib/favicon";
 import { getSiteCreator } from "@/lib/instance";
+import { versionLabel } from "@/lib/version";
 import { themeStyle } from "@/themes";
 
 export const dynamic = "force-dynamic";
@@ -26,6 +27,7 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     // Relative addresses in link previews (pictures, canonical links) become absolute from this one.
     metadataBase: baseUrl(),
+    generator: `Agora ${versionLabel()}`,
     title: creator?.name ?? "Agora",
     description: creator ? creator.tagline || markdownExcerpt(creator.bio ?? "", 160) || undefined : "A self-hosted platform for creators and their communities.",
     // Lets feed readers and browsers find the feed from any page.

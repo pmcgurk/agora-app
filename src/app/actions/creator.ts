@@ -3,6 +3,7 @@
 import { blockInDemo } from "@/lib/demo-guard";
 import { endAllPlans, endOtherPlans, endPlan } from "@/lib/subscriptions";
 import { getStripe } from "@/lib/stripe";
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { activeSubscriptionWhere } from "@/lib/access";
 import { requireUser } from "@/lib/auth";
@@ -268,6 +269,8 @@ export async function createPost(_previous: PostFormState, formData: FormData): 
   }
   // Only tells subscribers when the post is live; scheduled posts are announced when their time comes.
   await announceIfDue(postId);
+  // The dashboard sidebar counts drafts and scheduled posts; make it recount after the redirect.
+  revalidatePath("/dashboard", "layout");
   const done = {
     now: "Post published.",
     draft: "Draft saved. You'll find it under Drafts below. Only you can see it until you publish it.",
@@ -377,6 +380,7 @@ export async function updatePost(_previous: PostFormState, formData: FormData): 
   }
   await deleteObjects(obsolete);
   await announceIfDue(post.id);
+  revalidatePath("/dashboard", "layout");
   const done = {
     now: wasLive ? "Post saved." : "Post published.",
     draft: "Saved as a draft. You'll find it under Drafts below. Only you can see it.",
@@ -396,6 +400,7 @@ export async function deletePost(formData: FormData) {
 
   await prisma.post.delete({ where: { id: post.id } });
   await deleteObjects(post.media.flatMap(allKeysOf));
+  revalidatePath("/dashboard", "layout");
   redirect("/dashboard/posts?notice=Post+deleted.");
 }
 

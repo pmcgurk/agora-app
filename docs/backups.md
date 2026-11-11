@@ -93,6 +93,10 @@ mirror is not encrypted, so encrypt the whole folder in transit if that matters 
 What a backup does **not** contain is your environment: `.env` or the variables set on your host (database password,
 storage keys, `SETUP_TOKEN`, mail settings). Keep a copy of those in a password manager.
 
+**Keep `APP_SECRET` with them.** The Stripe keys and SMTP password saved in Settings are encrypted in the database with a key
+made from it, so a restored backup can only read them if `APP_SECRET` has the same value. If you have lost it, restore
+anyway and enter those keys again in Settings.
+
 ## The restore drill
 
 Do this once when you set backups up, and again every few months, or after changing hosts or storage:

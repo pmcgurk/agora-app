@@ -102,6 +102,121 @@ export function verifyEmailEmail(input: { to: string; siteName: string; name: st
   };
 }
 
+export function finishSignupEmail(input: { to: string; siteName: string; name: string; url: string; hours: number }): MailMessage {
+  const paragraphs = [
+    `Hi ${input.name}, thanks for signing up to ${input.siteName}. Open the link to choose a password and finish creating your account.`,
+    `The link works once and expires in ${input.hours} hours. If you didn’t ask for this, ignore this email and nothing will be created.`,
+  ];
+  const action = { label: "Finish signing up", url: input.url };
+  return {
+    to: input.to,
+    subject: `Finish signing up to ${input.siteName}`,
+    text: text(paragraphs, action),
+    html: layout(input.siteName, "Finish signing up", paragraphs, action),
+  };
+}
+
+export function alreadyRegisteredEmail(input: { to: string; siteName: string; name: string; loginUrl: string; resetUrl: string }): MailMessage {
+  const paragraphs = [
+    `Hi ${input.name}, someone (hopefully you) tried to sign up to ${input.siteName} with this email address, but it already has an account.`,
+    `You can log in with it. If you’ve forgotten your password, you can reset it: ${input.resetUrl}`,
+    "If it wasn’t you, you can ignore this email. Nothing has changed on your account.",
+  ];
+  const action = { label: "Log in", url: input.loginUrl };
+  return {
+    to: input.to,
+    subject: `You already have an account on ${input.siteName}`,
+    text: text(paragraphs, action),
+    html: layout(input.siteName, "You already have an account", paragraphs, action),
+  };
+}
+
+export function confirmEmailChangeEmail(input: { to: string; siteName: string; name: string; url: string; hours: number }): MailMessage {
+  const paragraphs = [
+    `Hi ${input.name}, you asked to use this address for your ${input.siteName} account. Open the link to confirm it.`,
+    `The link works once and expires in ${input.hours} hours. Until you open it, your account keeps its current address. If it wasn’t you, ignore this email.`,
+  ];
+  const action = { label: "Confirm this email address", url: input.url };
+  return {
+    to: input.to,
+    subject: `Confirm your new email for ${input.siteName}`,
+    text: text(paragraphs, action),
+    html: layout(input.siteName, "Confirm your new email", paragraphs, action),
+  };
+}
+
+export function emailChangedNoticeEmail(input: { to: string; siteName: string; name: string; newEmail: string; resetUrl: string }): MailMessage {
+  const paragraphs = [
+    `Hi ${input.name}, the email address on your ${input.siteName} account was changed to ${input.newEmail}.`,
+    `If that was you, nothing more to do. If it wasn’t, someone else has access to your account: reset your password straight away at ${input.resetUrl}`,
+  ];
+  return {
+    to: input.to,
+    subject: `Your ${input.siteName} email address was changed`,
+    text: text(paragraphs),
+    html: layout(input.siteName, "Your email address was changed", paragraphs),
+  };
+}
+
+export function emailInUseNoticeEmail(input: { to: string; siteName: string; loginUrl: string }): MailMessage {
+  const paragraphs = [
+    `Someone tried to move another ${input.siteName} account to this email address, but it already belongs to an account here.`,
+    "If that was you, log in to the account you want to keep. If not, you can ignore this email: nothing has changed.",
+  ];
+  const action = { label: "Log in", url: input.loginUrl };
+  return {
+    to: input.to,
+    subject: `About your ${input.siteName} email address`,
+    text: text(paragraphs, action),
+    html: layout(input.siteName, "About your email address", paragraphs, action),
+  };
+}
+
+export function accountDeletedEmail(input: { to: string; siteName: string; name: string }): MailMessage {
+  const paragraphs = [
+    `Hi ${input.name}, your ${input.siteName} account has been deleted, along with your memberships, likes and messages. Paid memberships were cancelled.`,
+    "If you didn’t do this, reply to the site owner straight away.",
+  ];
+  return {
+    to: input.to,
+    subject: `Your ${input.siteName} account was deleted`,
+    text: text(paragraphs),
+    html: layout(input.siteName, "Your account was deleted", paragraphs),
+  };
+}
+
+// The email a member gets when a creator they follow publishes. Every one carries a one-click unsubscribe.
+export function newPostEmail(input: {
+  to: string;
+  siteName: string;
+  creatorName: string;
+  title: string;
+  excerpt: string;
+  postUrl: string;
+  unsubscribeUrl: string;
+  oneClickUnsubscribeUrl: string;
+}): MailMessage {
+  const paragraphs = [`${input.creatorName} just published a new post.`, ...(input.excerpt ? [input.excerpt] : [])];
+  const action = { label: "Read the post", url: input.postUrl };
+  const footer = `You get this because you asked for emails when ${input.creatorName} posts on ${input.siteName}. Unsubscribe: ${input.unsubscribeUrl}`;
+  return {
+    to: input.to,
+    subject: `New post: ${input.title}`,
+    text: `${text([`${input.title}`, ...paragraphs], action)}
+
+--
+${footer}`,
+    html: layout(input.siteName, input.title, paragraphs, action).replace(
+      /You received this because of activity on [^<]*./,
+      `You get this because you asked for emails when ${escape(input.creatorName)} posts. <a href="${escape(input.unsubscribeUrl)}">Unsubscribe</a>.`,
+    ),
+    headers: {
+      "List-Unsubscribe": `<${input.oneClickUnsubscribeUrl}>`,
+      "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+    },
+  };
+}
+
 export function testEmail(input: { to: string; siteName: string }): MailMessage {
   const paragraphs = [`This is a test email from ${input.siteName}. If you can read it, outgoing mail works.`];
   return {

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { removeStripeKeys, saveCurrency, savePayments, saveStripeKeys, saveTips } from "@/app/actions/settings";
+import CredentialNotice from "@/components/CredentialNotice";
 import Flash from "@/components/Flash";
 import { buttonClass, inputClass, linkClass } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
@@ -36,6 +37,7 @@ export default async function CurrencySettings({
         <button className={buttonClass}>Save</button>
       </form>
       <h2 className="text-xl font-semibold">Stripe</h2>
+      <CredentialNotice />
       <p className="text-sm text-muted">
         {stripe.source === "settings" && "Stripe is connected using keys saved here."}
         {stripe.source === "env" && "Stripe is connected using the server's STRIPE_SECRET_KEY environment variable. Saving a key here overrides it."}

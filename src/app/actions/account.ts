@@ -4,8 +4,8 @@ import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { blockInDemo } from "@/lib/demo-guard";
-import { mailIsConfigured, sendPasswordResetEmail, sendVerificationEmail } from "@/lib/account-email";
-import { consumeEmailToken, findEmailToken } from "@/lib/email-tokens";
+import { mailIsConfigured, sendEmailChangedNotice, sendPasswordResetEmail, sendVerificationEmail } from "@/lib/account-email";
+import { consumeEmailToken, consumeEmailTokenDetails, findEmailToken } from "@/lib/email-tokens";
 import { hashPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
 import { clientIp, withinLimit } from "@/lib/rate-limit";
@@ -96,4 +96,26 @@ export async function resendVerification() {
   );
   if (!sent) go("/verify-email", "error", "The email could not be sent. Try again later.");
   go("/verify-email", "notice", `We sent a new link to ${user.email}.`);
+}
+
+// Confirms a new email address from the link sent to it. The account moves to the new address, every device is
+// signed out, and the old address is told, so a hijacked account cannot quietly change its email.
+export async function confirmEmailChange(formData: FormData) {
+  await blockInDemo();
+  const token = String(formData.get("token") ?? "");
+  if (!withinLimit(`email-change-use:${await clientIp()}`, 30, HOUR)) go("/login", "error", "Too many attempts. Try again later.");
+  const used = await consumeEmailTokenDetails(token, "EMAIL_CHANGE");
+  if (!used?.payload) go("/login", "error", "That link has expired or was already used. Ask for a new one in Settings.");
+  const newEmail = used!.payload!;
+  const user = await prisma.user.findUnique({ where: { id: used!.userId }, select: { id: true, name: true, email: true } });
+  if (!user) go("/login", "error", "That account no longer exists.");
+  if (await prisma.user.findUnique({ where: { email: newEmail }, select: { id: true } })) go("/login", "error", "That address now belongs to another account, so it could not be used.");
+
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: user!.id }, data: { email: newEmail, emailVerifiedAt: new Date() } }),
+    prisma.session.deleteMany({ where: { userId: user!.id } }),
+    prisma.emailToken.deleteMany({ where: { userId: user!.id } }),
+  ]);
+  after(() => sendEmailChangedNotice(user!.email, user!, newEmail).catch(() => undefined));
+  go("/login", "notice", "Your email address has been changed. Log in with the new one.");
 }
